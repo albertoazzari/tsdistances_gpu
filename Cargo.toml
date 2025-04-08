@@ -1,0 +1,17 @@
+[package]
+name = "tsdistances"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git", version = "0.9.0" }
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16
+
+[profile.dev.build-override]
+opt-level = 3
+
+[dependencies]
+vulkano = "0.35.1"
