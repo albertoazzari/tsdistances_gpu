@@ -7,7 +7,7 @@ use spirv_std::{glam, spirv};
 use spirv_std::num_traits::Float;
 
 #[spirv(compute(threads(64)))]
-pub fn main_cs(
+pub fn erp(
     #[spirv(global_invocation_id)] id: UVec3,
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] input_a: &[f32],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] input_b: &[f32],

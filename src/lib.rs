@@ -20,6 +20,8 @@ use vulkano::{
 
 const SHADER: &[u8] = include_bytes!(env!("tsdistances_gpu.spv"));
 
+// 
+
 #[cfg(test)]
 mod tests {
 
@@ -351,13 +353,12 @@ pub fn compute_shader(
     let data_buffer_content = diagonal.read().unwrap();
     for n in 0..diagonal.len() {
         if n < 10 {
-            println!(
-                "Diagonal[{}]: {}",
-                n,
-                data_buffer_content[n as usize]
-            );
+            println!("Diagonal[{}]: {}", n, data_buffer_content[n as usize]);
         }
-        assert_eq_with_tol!(data_buffer_content[n as usize], (input_a[n as usize] * input_b[n as usize]).log2());
+        assert_eq_with_tol!(
+            data_buffer_content[n as usize],
+            (input_a[n as usize] * input_b[n as usize]).log2()
+        );
     }
     println!("Success");
     Ok(())
