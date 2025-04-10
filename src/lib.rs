@@ -27,6 +27,11 @@ mod tests;
 mod utils;
 
 #[cfg(not(target_arch = "spirv"))]
+mod kernels;
+#[cfg(not(target_arch = "spirv"))]
+mod warps;
+
+#[cfg(not(target_arch = "spirv"))]
 mod cpu {
 
     use crate::assert_eq_with_tol;

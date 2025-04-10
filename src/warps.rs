@@ -1,7 +1,16 @@
 use std::sync::Arc;
 
-use crate::kernels::warp::GpuKernelImpl;
-use vulkano::device::Device;
+use crate::{
+    kernels::warp::GpuKernelImpl,
+    utils::{move_cpu, move_gpu},
+};
+use vulkano::{
+    command_buffer::{
+        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+    },
+    device::{Device, Queue},
+    sync::GpuFuture,
+};
 
 pub trait GpuBatchMode {
     const IS_BATCH: bool;
@@ -138,6 +147,8 @@ fn compute_diag_len<M: GpuBatchMode>(sample_length: usize, pad_stride: usize) ->
 
 pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     device: Arc<Device>,
+    queue: Arc<Queue>,
+    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     params: G,
     a: M::InputType<'a>,
     b: M::InputType<'a>,
@@ -161,7 +172,10 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     // Limit the maximum size of a buffer to 2gb
     // a_count * b_count * diag_len should not exceed 2gb / size_of::<f32>())
-    let max_buffer_size = device.physical_device().properties().max_storage_buffer_range as usize;
+    let max_buffer_size = device
+        .physical_device()
+        .properties()
+        .max_storage_buffer_range as usize;
 
     // M::get_sample_length(&b) * diag_len
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
@@ -184,6 +198,8 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
         distances.push(diamond_partitioning_gpu_::<G, M>(
             device.clone(),
+            queue.clone(),
+            command_buffer_allocator.clone(),
             &params,
             max_subgroup_threads,
             M::get_sample_length(&a),
@@ -201,6 +217,8 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 #[inline(always)]
 fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     device: Arc<Device>,
+    queue: Arc<Queue>,
+    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     params: &G,
     max_subgroup_threads: usize,
     a_sample_len: usize,
@@ -233,11 +251,23 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     let mut a_start = 0;
     let mut b_start = 0;
 
+    let mut builder = AutoCommandBufferBuilder::primary(
+        command_buffer_allocator.clone(),
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )
+    .unwrap();
+
+    let a_gpu = move_gpu(&a, &mut builder, device.clone());
+    let b_gpu = move_gpu(&a, &mut builder, device.clone());
+    let mut diagonal = move_gpu(&diagonal, &mut builder, device.clone());
+
     // Number of kernel calls
     for i in 0..rows_count {
         if is_batch {
             params.dispatch_batch(
                 device.clone(),
+                &mut builder,
                 first_coord as i64,
                 i as u64,
                 diamonds_count as u64,
@@ -248,13 +278,14 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
                 padded_a_len as u64,
                 padded_b_len as u64,
                 max_subgroup_threads as u64,
-                &a,
-                &b,
+                &a_gpu,
+                &b_gpu,
                 &mut diagonal,
             );
         } else {
             params.dispatch(
                 device.clone(),
+                &mut builder,
                 first_coord as i64,
                 i as u64,
                 diamonds_count as u64,
@@ -263,8 +294,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
                 a_sample_len as u64,
                 b_sample_len as u64,
                 max_subgroup_threads as u64,
-                &a,
-                &b,
+                &a_gpu,
+                &b_gpu,
                 &mut diagonal,
             );
         }
@@ -289,7 +320,18 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
 
+    let diagonal = move_cpu(diagonal, &mut builder, device.clone());
+    let command_buffer = builder.build().unwrap();
+    let future = vulkano::sync::now(device)
+        .then_execute(queue, command_buffer)
+        .unwrap()
+        .then_signal_fence_and_flush()
+        .unwrap();
+    future.wait(None).unwrap();
+
     let mut res = M::new_return(a_count, b_count);
+
+    let diagonal = diagonal.read().unwrap();
 
     for i in 0..a_count {
         for j in 0..b_count {
