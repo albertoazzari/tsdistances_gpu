@@ -19,10 +19,8 @@ codegen-units = 16
 opt-level = 3
 
 [dependencies]
-vulkano = { version = "0.35.1", optional = true }
-spirv-std = { version = "0.9", optional = true }
+[target.'cfg(not(target_arch = "spirv"))'.dependencies]
+vulkano = { version = "0.35.1" }
 
-
-[features]
-default = ["dep:spirv-std"]
-build_cpu = ["dep:vulkano"]
+[target.'cfg(target_arch = "spirv")'.dependencies]
+spirv-std = { version = "0.9" }
