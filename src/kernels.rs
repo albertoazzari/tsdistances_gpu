@@ -4,7 +4,10 @@ pub mod warp {
 
     use vulkano::buffer::Subbuffer;
     use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
+    use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+    use vulkano::descriptor_set::layout::DescriptorSetLayout;
     use vulkano::device::Device;
+    use vulkano::pipeline::ComputePipeline;
 
     pub struct GpuMatrix<'a> {
         diagonal: &'a mut [f32],
@@ -67,7 +70,7 @@ pub mod warp {
             // Warp synchronize
             #[cfg(target_arch = "spirv")]
             unsafe {
-                crate::krnl_core::spirv_std::arch::workgroup_memory_barrier_with_group_sync()
+                crate::spirv_std::arch::workgroup_memory_barrier_with_group_sync()
             };
 
             if d <= max_subgroup_threads {
@@ -151,8 +154,9 @@ pub mod warp {
             $(
                 pub mod $name {
                     #[cfg(not(target_arch = "spirv"))]
-                    use krnl::krnl_core;
-                    use krnl_core::macros::kernel;
+                    use std::sync::Arc;
+                    #[cfg(not(target_arch = "spirv"))]
+                    use vulkano::{pipeline::{ComputePipeline, PipelineBindPoint, Pipeline}, device::Device,descriptor_set::{DescriptorSet, WriteDescriptorSet, allocator::StandardDescriptorSetAllocator, layout::DescriptorSetLayout}, command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer}, buffer::Subbuffer};
 
                     #[cfg(not(target_arch = "spirv"))]
                     use super::GpuKernelImpl;
@@ -163,7 +167,7 @@ pub mod warp {
                         $(pub $param2: $ty2,)?
                         $(pub $param3: $ty3,)?
                         $(pub $param4: $ty4,)?
-                        $(pub $vec5:  krnl::buffer::Buffer<$ty5>,)?
+                        $(pub $vec5:  vulkano::buffer::Subbuffer<$ty5>,)?
                     }
 
                     #[cfg(not(target_arch = "spirv"))]
@@ -171,6 +175,10 @@ pub mod warp {
                         fn dispatch(
                             &self,
                             device: Arc<Device>,
+                            dsa: Arc<StandardDescriptorSetAllocator>,
+                            layout: Arc<DescriptorSetLayout>,
+                            pipeline: Arc<ComputePipeline>,
+                            builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                             first_coord: i64,
                             row: u64,
                             diamonds_count: u64,
@@ -183,45 +191,33 @@ pub mod warp {
                             b: &Subbuffer<[f32]>,
                             diagonal: &mut Subbuffer<[f32]>,
                         ) {
-                            // Pass as arc
-                            // let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
-                            //     device.clone(),
-                            //     Default::default(),
-                            // ));
-
-
-                            // let set = DescriptorSet::new(
-                            //     self.descriptor_set_allocator.clone(),
-                            //     layout.clone(),
-                            //     [
-                            //         WriteDescriptorSet::buffer(0, diagonal.clone()),
-                            //         WriteDescriptorSet::buffer(1, a.clone()),
-                            //         WriteDescriptorSet::buffer(2, b.clone()),
-                            //     ],
-                            //     [],
-                            // )
-                            // .unwrap();
+                            let set = DescriptorSet::new(
+                                dsa.clone(),
+                                layout.clone(),
+                                [
+                                    WriteDescriptorSet::buffer(0, diagonal.clone()),
+                                    WriteDescriptorSet::buffer(1, a.clone()),
+                                    WriteDescriptorSet::buffer(2, b.clone()),
+                                ],
+                                [],
+                            )
+                            .unwrap();
 
                             // pipeline => cs_load("kernels::erp::single_call")
-                            // builder
-                            //     .bind_pipeline_compute(self.pipeline.clone())
-                            //     .unwrap()
-                            //     .bind_descriptor_sets(
-                            //         PipelineBindPoint::Compute,
-                            //         pipeline.layout().clone(),
-                            //         0,
-                            //         set,
-                            //     )
-                            //     .unwrap();
-
-                            // unsafe { builder.dispatch([(diamonds_count * max_subgroup_threads) as u32, 1, 1]) }.unwrap();
-
-                            single_call::builder()
+                            builder
+                                .bind_pipeline_compute(pipeline.clone())
                                 .unwrap()
-                                .build(device)
-                                .unwrap()
-                                .with_global_threads((diamonds_count * max_subgroup_threads) as u32)
-                                .dispatch(
+                                .bind_descriptor_sets(
+                                    PipelineBindPoint::Compute,
+                                    pipeline.layout().clone(),
+                                    0,
+                                    set,
+                                )
+                                .unwrap();
+
+                            unsafe { builder.dispatch([(diamonds_count * max_subgroup_threads) as u32, 1, 1]) }.unwrap();
+
+                            single_call(
                                     first_coord,
                                     row,
                                     diamonds_count,
@@ -245,6 +241,10 @@ pub mod warp {
                         fn dispatch_batch(
                             &self,
                             device: Arc<Device>,
+                            sdsa: Arc<StandardDescriptorSetAllocator>,
+                            layout: Arc<DescriptorSetLayout>,
+                            pipeline: Arc<ComputePipeline>,
+                            builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                             first_coord: i64,
                             row: u64,
                             diamonds_count: u64,
@@ -292,6 +292,7 @@ pub mod warp {
                 }
 
                 // kernels::erp::single_call
+                use glam::UVec3;
                 fn single_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     first_coord: i64,
@@ -307,12 +308,10 @@ pub mod warp {
                     $(param3: $ty3,)?
                     $(param4: $ty4,)?
                     $(#[global] vec5: Slice<$ty5>,)?
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] $a: Slice<f32>,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $b: Slice<f32>,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] diagonal: UnsafeSlice<f32>,
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [f32],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[f32],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[f32],
                 ) {
-                    use krnl_core::buffer::UnsafeIndex;
-                    use krnl_core::num_traits::Float;
 
                     $(let $param1 = param1;)?
                     $(let $param2 = param2;)?
@@ -323,8 +322,8 @@ pub mod warp {
                     let $a_offset = 0;
                     let $b_offset = 0;
 
-                    let global_id = global_id.x;//kernel.global_id() as u64;
-                    super::warp_kernel(
+                    let global_id = global_id.x as u64;//kernel.global_id() as u64;
+                    warp_kernel(
                         global_id,
                         first_coord,
                         row,
@@ -343,6 +342,7 @@ pub mod warp {
 
                 // kernels::erp::batch_call
                 fn batch_call(
+                    #[spirv(global_invocation_id)] global_id: UVec3,
                     first_coord: i64,
                     row: u64,
                     diamonds_count: u64,
@@ -358,12 +358,10 @@ pub mod warp {
                     $(param3: $ty3,)?
                     $(param4: $ty4,)?
                     $(#[global] vec5: Slice<$ty5>,)?
-                    #[global] $a: Slice<f32>,
-                    #[global] $b: Slice<f32>,
-                    #[global] diagonal: UnsafeSlice<f32>,
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [f32],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] $a: &[f32],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $b: &[f32],
                 ) {
-                    use krnl_core::buffer::UnsafeIndex;
-                    use krnl_core::num_traits::Float;
 
                     $(let $param1 = param1;)?
                     $(let $param2 = param2;)?
@@ -372,7 +370,7 @@ pub mod warp {
                     $(let $vec5 = vec5;)?
 
 
-                    let global_id = kernel.global_id() as u64;
+                    let global_id = global_id.x as u64;
                     let threads_stride = diamonds_count * max_subgroup_threads;
 
                     let pair_index = global_id / threads_stride;
@@ -390,7 +388,7 @@ pub mod warp {
                     let $a_offset = a_index as usize * padded_a_len as usize;
                     let $b_offset = b_index as usize * padded_b_len as usize;
 
-                    super::warp_kernel(
+                    warp_kernel(
                         instance_id,
                         first_coord,
                         row,
@@ -415,6 +413,9 @@ pub mod warp {
         fn dispatch(
             &self,
             device: Arc<Device>,
+            // stsa: Arc<StandardDescriptorSetAllocator>,
+            // layout: Arc<DescriptorSetLayout>,
+            // pipeline: Arc<ComputePipeline>,
             builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
             first_coord: i64,
             row: u64,
@@ -432,6 +433,9 @@ pub mod warp {
         fn dispatch_batch(
             &self,
             device: Arc<Device>,
+            // stsa: Arc<StandardDescriptorSetAllocator>,
+            // layout: Arc<DescriptorSetLayout>,
+            // pipeline: Arc<ComputePipeline>,
             builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
             first_coord: i64,
             row: u64,
@@ -460,6 +464,7 @@ pub mod warp {
     //         (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
     //         .min((z + (a[a_offset + i as usize] - gap_penalty).abs()).min(x + (b[b_offset + j as usize] - gap_penalty).abs()))
     //     }
+    // }
     //     fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: f32], [], [], [], []) {
     //         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
     //         (dist <= epsilon) as i32 as f32 * (y + 1.0) + (dist > epsilon) as i32 as f32 * x.max(z)

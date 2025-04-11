@@ -267,6 +267,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         if is_batch {
             params.dispatch_batch(
                 device.clone(),
+                // command_buffer_allocator.clone(),
+
                 &mut builder,
                 first_coord as i64,
                 i as u64,
@@ -285,6 +287,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         } else {
             params.dispatch(
                 device.clone(),
+                // command_buffer_allocator.clone(),
                 &mut builder,
                 first_coord as i64,
                 i as u64,

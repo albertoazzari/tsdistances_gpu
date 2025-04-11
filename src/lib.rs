@@ -21,13 +21,11 @@ pub mod gpu {
     }
 }
 #[cfg(not(target_arch = "spirv"))]
+mod kernels;
+#[cfg(not(target_arch = "spirv"))]
 mod tests;
-
 #[cfg(not(target_arch = "spirv"))]
 mod utils;
-
-#[cfg(not(target_arch = "spirv"))]
-mod kernels;
 #[cfg(not(target_arch = "spirv"))]
 mod warps;
 
