@@ -1,4 +1,5 @@
 #![cfg_attr(target_arch = "spirv", no_std)]
+#![allow(unexpected_cfgs)]
 
 #[cfg(target_arch = "spirv")]
 pub mod gpu {
@@ -20,8 +21,12 @@ pub mod gpu {
         diagonal[index] = (input_a[index] * input_b[index]).log2();
     }
 }
-#[cfg(not(target_arch = "spirv"))]
+
 mod kernels;
+
+#[cfg(not(target_arch = "spirv"))]
+pub mod shader_load;
+
 #[cfg(not(target_arch = "spirv"))]
 mod tests;
 #[cfg(not(target_arch = "spirv"))]

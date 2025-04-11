@@ -1,5 +1,3 @@
-use crate::{cpu::compute_shader, utils};
-
 #[test]
 fn test_device() {
     let (physical_device, _, queue_family_index) = utils::get_device();
@@ -16,6 +14,7 @@ fn test_device() {
 
 #[test]
 fn test_shader() {
+    use crate::{cpu::compute_shader, utils};
     let shader = include_bytes!(env!("tsdistances.spv"));
     let (physical_device, device_extensions, queue_family_index) = utils::get_device();
     let result = compute_shader(

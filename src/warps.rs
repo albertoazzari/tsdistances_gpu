@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use crate::{
-    kernels::warp::GpuKernelImpl,
+    kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
     utils::{move_cpu, move_gpu},
 };
 use vulkano::{
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
     },
+    descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{Device, Queue},
     sync::GpuFuture,
 };
@@ -149,6 +150,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     device: Arc<Device>,
     queue: Arc<Queue>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     params: G,
     a: M::InputType<'a>,
     b: M::InputType<'a>,
@@ -200,6 +202,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
             device.clone(),
             queue.clone(),
             command_buffer_allocator.clone(),
+            descriptor_set_allocator.clone(),
             &params,
             max_subgroup_threads,
             M::get_sample_length(&a),
@@ -219,6 +222,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     device: Arc<Device>,
     queue: Arc<Queue>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     params: &G,
     max_subgroup_threads: usize,
     a_sample_len: usize,
@@ -264,44 +268,30 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     // Number of kernel calls
     for i in 0..rows_count {
-        if is_batch {
-            params.dispatch_batch(
-                device.clone(),
-                // command_buffer_allocator.clone(),
-
-                &mut builder,
-                first_coord as i64,
-                i as u64,
-                diamonds_count as u64,
-                a_start as u64,
-                b_start as u64,
-                a_sample_len as u64,
-                b_sample_len as u64,
-                padded_a_len as u64,
-                padded_b_len as u64,
-                max_subgroup_threads as u64,
-                &a_gpu,
-                &b_gpu,
-                &mut diagonal,
-            );
-        } else {
-            params.dispatch(
-                device.clone(),
-                // command_buffer_allocator.clone(),
-                &mut builder,
-                first_coord as i64,
-                i as u64,
-                diamonds_count as u64,
-                a_start as u64,
-                b_start as u64,
-                a_sample_len as u64,
-                b_sample_len as u64,
-                max_subgroup_threads as u64,
-                &a_gpu,
-                &b_gpu,
-                &mut diagonal,
-            );
-        }
+        params.dispatch(
+            device.clone(),
+            descriptor_set_allocator.clone(),
+            &mut builder,
+            first_coord as i64,
+            i as u64,
+            diamonds_count as u64,
+            a_start as u64,
+            b_start as u64,
+            a_sample_len as u64,
+            b_sample_len as u64,
+            max_subgroup_threads as u64,
+            &a_gpu,
+            &b_gpu,
+            &mut diagonal,
+            if is_batch {
+                Some(BatchInfo {
+                    padded_a_len: padded_a_len as u64,
+                    padded_b_len: padded_b_len as u64,
+                })
+            } else {
+                None
+            },
+        );
 
         if i < (a_diamonds - 1) {
             diamonds_count += 1;
