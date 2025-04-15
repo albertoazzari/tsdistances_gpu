@@ -9,7 +9,8 @@ use vulkano::{
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo,
+        QueueFlags,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     memory::allocator::{
@@ -80,6 +81,12 @@ pub fn get_device() -> (
         physical_device,
         DeviceCreateInfo {
             enabled_extensions: device_extensions,
+            enabled_features: {
+                let mut features = DeviceFeatures::default();
+                features.shader_int64 = true;
+                features.shader_int8 = true;
+                features
+            },
             queue_create_infos: vec![QueueCreateInfo {
                 queue_family_index,
                 ..Default::default()

@@ -152,6 +152,7 @@ macro_rules! warp_kernel_spec {
                 }
 
                 #[derive(Clone, Copy, bytemuck::AnyBitPattern)]
+                #[repr(C)]
                 #[allow(unused)]
                 pub struct KernelConstants {
                     first_coord: i64,
