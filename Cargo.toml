@@ -26,4 +26,4 @@ dashmap = "6.1.0"
 spirv-std = { version = "0.9" }
 
 [dependencies]
-bytemuck = { version = "1.22.0", features = ["bytemuck_derive"] }
+bytemuck = { version = "1.22.0", features = ["derive"] }

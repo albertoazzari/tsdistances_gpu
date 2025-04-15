@@ -12,7 +12,6 @@ mod utils;
 #[cfg(not(target_arch = "spirv"))]
 mod warps;
 
-
 #[cfg(not(target_arch = "spirv"))]
 mod cpu {
 
@@ -53,7 +52,6 @@ mod cpu {
         b: M::InputType<'a>,
         gap_penalty: f64,
     ) -> M::ReturnType {
-    
         diamond_partitioning_gpu::<_, M>(
             device,
             queue,

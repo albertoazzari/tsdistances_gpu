@@ -2,10 +2,14 @@ use std::{cell::OnceCell, sync::Arc};
 
 use vulkano::{
     buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
-    command_buffer::{AutoCommandBufferBuilder, CopyBufferInfo, PrimaryAutoCommandBuffer},
+    command_buffer::{
+        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CopyBufferInfo,
+        PrimaryAutoCommandBuffer,
+    },
+    descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceExtensions, QueueFlags,
+        Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     memory::allocator::{
@@ -29,7 +33,12 @@ macro_rules! assert_eq_with_tol {
     };
 }
 
-pub fn get_device() -> (Arc<Device>, Arc<Queue>, Arc<StandardCommandBufferAllocator>, Arc<StandardDescriptorSetAllocator>) {
+pub fn get_device() -> (
+    Arc<Device>,
+    Arc<Queue>,
+    Arc<StandardCommandBufferAllocator>,
+    Arc<StandardDescriptorSetAllocator>,
+) {
     let cell = OnceCell::new();
     let instance = cell.get_or_init(|| {
         let library = VulkanLibrary::new().unwrap();
@@ -91,7 +100,12 @@ pub fn get_device() -> (Arc<Device>, Arc<Queue>, Arc<StandardCommandBufferAlloca
         Default::default(),
     ));
 
-    (device, queue, command_buffer_allocator, descriptor_set_allocator)
+    (
+        device,
+        queue,
+        command_buffer_allocator,
+        descriptor_set_allocator,
+    )
 }
 
 pub fn move_gpu<T: BufferContents + Copy>(

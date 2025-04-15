@@ -1,4 +1,4 @@
-use spirv_builder::{MetadataPrintout, SpirvBuilder};
+use spirv_builder::{Capability, MetadataPrintout, SpirvBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "spirv" {
@@ -11,6 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shader_crate = ".";
     SpirvBuilder::new(shader_crate, target)
         .print_metadata(MetadataPrintout::Full)
+        .capability(Capability::Int64)
+        .capability(Capability::Int8)
         .build()?;
     Ok(())
 }
