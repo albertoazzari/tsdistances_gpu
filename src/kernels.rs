@@ -280,7 +280,7 @@ macro_rules! warp_kernel_spec {
                 use spirv_std::{glam::UVec3, spirv};
 
                 #[cfg(target_arch = "spirv")]
-                #[spirv(compute(threads(32)))]
+                #[spirv(compute(threads(32), entry_point_name="single_call"))]
                 fn single_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
@@ -317,7 +317,7 @@ macro_rules! warp_kernel_spec {
                     );
                 }
                 #[cfg(target_arch = "spirv")]
-                #[spirv(compute(threads(32)))]
+                #[spirv(compute(threads(32), entry_point_name="batch_call"))]
                 fn batch_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
@@ -419,52 +419,51 @@ warp_kernel_spec! {
         (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
         .min((z + (a[a_offset + i as usize] - gap_penalty).abs()).min(x + (b[b_offset + j as usize] - gap_penalty).abs()))
     }
+    // fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: f32], [], [], [], []) {
+    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
+    //     (dist <= epsilon) as i32 as f32 * (y + 1.0) + (dist > epsilon) as i32 as f32 * x.max(z)
+    // }
+    // fn dtw_distance[DTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
+    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
+    //     dist + z.min(x.min(y))
+    // }
+    // fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: f32]) {
+    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2) * weights[(i as i32 - j as i32).abs() as usize];
+    //     dist + x.min(y.min(z))
+    // }
+    // fn msm_distance[MSMImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
+    //     (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
+    //     .min(
+    //         z + super::msm_cost_function(a[a_offset + i as usize], if i == 0 {0.0} else {a[a_offset + i as usize - 1]}, b[b_offset + j as usize]),
+    //     )
+    //     .min(
+    //         x + super::msm_cost_function(b[b_offset + j as usize], a[a_offset + i as usize], if j == 0 {0.0} else {b[b_offset + j as usize - 1]}),
+    //     )
+    // }
+    // fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: f32], [penalty: f32], [], [], []) {
+    //     let delete_addition = penalty + stiffness;
+    //     // deletion in a
+    //     let del_a =
+    //     z + (if i == 0 {0.0} else {a[a_offset + i as usize - 1]} - a[a_offset + i as usize]).abs() + delete_addition;
 
-    fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: f32], [], [], [], []) {
-        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
-        (dist <= epsilon) as i32 as f32 * (y + 1.0) + (dist > epsilon) as i32 as f32 * x.max(z)
-    }
-    fn dtw_distance[DTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
-        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
-        dist + z.min(x.min(y))
-    }
-    fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: f32]) {
-        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2) * weights[(i as i32 - j as i32).abs() as usize];
-        dist + x.min(y.min(z))
-    }
-    fn msm_distance[MSMImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
-        (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
-        .min(
-            z + super::msm_cost_function(a[a_offset + i as usize], if i == 0 {0.0} else {a[a_offset + i as usize - 1]}, b[b_offset + j as usize]),
-        )
-        .min(
-            x + super::msm_cost_function(b[b_offset + j as usize], a[a_offset + i as usize], if j == 0 {0.0} else {b[b_offset + j as usize - 1]}),
-        )
-    }
-    fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: f32], [penalty: f32], [], [], []) {
-        let delete_addition = penalty + stiffness;
-        // deletion in a
-        let del_a =
-        z + (if i == 0 {0.0} else {a[a_offset + i as usize - 1]} - a[a_offset + i as usize]).abs() + delete_addition;
+    //     // deletion in b
+    //     let del_b =
+    //         x + (if j == 0 {0.0} else {b[b_offset + j as usize - 1]} - b[b_offset + j as usize]).abs() + delete_addition;
 
-        // deletion in b
-        let del_b =
-            x + (if j == 0 {0.0} else {b[b_offset + j as usize - 1]} - b[b_offset + j as usize]).abs() + delete_addition;
+    //     // match
+    //     let match_current = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
+    //     let match_previous = (if i == 0 {0.0} else {a[a_offset + i as usize - 1]}
+    //         - if j == 0 {0.0} else {b[b_offset + j as usize - 1]})
+    //     .abs();
+    //     let match_a_b = y
+    //         + match_current
+    //         + match_previous
+    //         + stiffness * (2.0 * (i as isize - j as isize).abs() as f32);
 
-        // match
-        let match_current = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
-        let match_previous = (if i == 0 {0.0} else {a[a_offset + i as usize - 1]}
-            - if j == 0 {0.0} else {b[b_offset + j as usize - 1]})
-        .abs();
-        let match_a_b = y
-            + match_current
-            + match_previous
-            + stiffness * (2.0 * (i as isize - j as isize).abs() as f32);
-
-        del_a.min(del_b.min(match_a_b))
-    }
-    fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: f32], [], [], [], []) {
-        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
-                dist + (z + w).min((x + w).min(y))
-    }
+    //     del_a.min(del_b.min(match_a_b))
+    // }
+    // fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: f32], [], [], [], []) {
+    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
+    //             dist + (z + w).min((x + w).min(y))
+    // }
 }

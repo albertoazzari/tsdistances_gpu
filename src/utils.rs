@@ -29,7 +29,7 @@ macro_rules! assert_eq_with_tol {
     };
 }
 
-pub fn get_device() -> (Arc<PhysicalDevice>, DeviceExtensions, u32) {
+pub fn get_device() -> (Arc<Device>, Arc<Queue>, Arc<StandardCommandBufferAllocator>, Arc<StandardDescriptorSetAllocator>) {
     let cell = OnceCell::new();
     let instance = cell.get_or_init(|| {
         let library = VulkanLibrary::new().unwrap();
@@ -46,6 +46,7 @@ pub fn get_device() -> (Arc<PhysicalDevice>, DeviceExtensions, u32) {
         khr_storage_buffer_storage_class: true,
         ..DeviceExtensions::empty()
     };
+
     let (physical_device, queue_family_index) = instance
         .enumerate_physical_devices()
         .unwrap()
@@ -65,7 +66,32 @@ pub fn get_device() -> (Arc<PhysicalDevice>, DeviceExtensions, u32) {
             _ => 5,
         })
         .unwrap();
-    (physical_device, device_extensions, queue_family_index)
+
+    let (device, mut queues) = Device::new(
+        physical_device,
+        DeviceCreateInfo {
+            enabled_extensions: device_extensions,
+            queue_create_infos: vec![QueueCreateInfo {
+                queue_family_index,
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let queue = queues.next().unwrap();
+
+    let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
+        device.clone(),
+        Default::default(),
+    ));
+
+    let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+        device.clone(),
+        Default::default(),
+    ));
+
+    (device, queue, command_buffer_allocator, descriptor_set_allocator)
 }
 
 pub fn move_gpu<T: BufferContents + Copy>(
