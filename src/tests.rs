@@ -40,6 +40,7 @@ pub fn test_erp() {
     let erp_ts: Vec<Vec<f64>> = read_csv("tests/data/erp_ts.csv").unwrap();
 
     let gap_penalty = 1.0;
+    let start_time = std::time::Instant::now();
     let result = crate::cpu::erp::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -49,7 +50,11 @@ pub fn test_erp() {
         &ts,
         gap_penalty,
     );
-
+    
+    println!(
+        "GPU ERP time: {} ms",
+        start_time.elapsed().as_secs_f64() * 1000.0
+    );
     for i in 0..ts.len()-1 {
         for j in i+1..ts.len() {
             assert_eq_with_tol!(result[i][j], erp_ts[i][j], 1e-6);
