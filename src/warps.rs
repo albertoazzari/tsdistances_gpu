@@ -83,7 +83,6 @@ impl GpuBatchMode for SingleBatchMode {
 }
 
 pub struct MultiBatchMode;
-
 impl GpuBatchMode for MultiBatchMode {
     const IS_BATCH: bool = true;
 
@@ -111,7 +110,6 @@ impl GpuBatchMode for MultiBatchMode {
                 padded[i * single_padded_len + j] = input[i][j] as f32;
             }
         }
-
         padded
     }
 
@@ -133,7 +131,6 @@ impl GpuBatchMode for MultiBatchMode {
         start: usize,
         len: usize,
     ) -> Self::InputType<'a> {
-        // println!("GINO start: {}, len: {}, a_len: {}", start, len, input.len());
         &input[start..(start + len)]
     }
 
@@ -172,14 +169,11 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_threads);
 
-    // Limit the maximum size of a buffer to 2gb
-    // a_count * b_count * diag_len should not exceed 2gb / size_of::<f32>())
     let max_buffer_size = device
         .physical_device()
         .properties()
         .max_storage_buffer_range as usize;
 
-    // M::get_sample_length(&b) * diag_len
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
 
     if max_a_batch_size == 0 {
@@ -193,7 +187,6 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     while start < a_len {
         let len = a_batch_size.min(a_len - start);
-        // println!("start: {}, len: {}, a_len: {}", start, len, a_len);
         let a = M::get_subslice(&a, start, len);
         let a_padded = M::build_padded(&a, max_subgroup_threads);
         let b_padded = M::build_padded(&b, max_subgroup_threads);
@@ -263,7 +256,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     .unwrap();
 
     let a_gpu = move_gpu(&a, &mut builder, device.clone());
-    let b_gpu = move_gpu(&a, &mut builder, device.clone());
+    let b_gpu = move_gpu(&b, &mut builder, device.clone());
     let mut diagonal = move_gpu(&diagonal, &mut builder, device.clone());
 
     // Number of kernel calls
@@ -314,6 +307,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
 
     let diagonal = move_cpu(diagonal, &mut builder, device.clone());
+
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
@@ -324,7 +318,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let mut res = M::new_return(a_count, b_count);
 
-    let diagonal = diagonal.read().unwrap();
+    let diagonal = diagonal.read().unwrap().to_vec();
 
     for i in 0..a_count {
         for j in 0..b_count {
@@ -337,7 +331,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
             );
         }
     }
-
     res
 }
 

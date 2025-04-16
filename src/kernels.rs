@@ -310,6 +310,7 @@ macro_rules! warp_kernel_spec {
                     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[f32],
                     $(#[spirv(storage_buffer, descriptor_set = 0, binding = 3)] vec5: &[$ty5],)?
                 ) {
+
                     $(let $param1 = constants.param1;)?
                     $(let $param2 = constants.param2;)?
                     $(let $param3 = constants.param3;)?

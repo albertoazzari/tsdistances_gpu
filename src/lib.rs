@@ -14,34 +14,16 @@ mod warps;
 
 #[cfg(not(target_arch = "spirv"))]
 mod cpu {
-
-    use crate::assert_eq_with_tol;
-    use crate::kernels::erp_distance::cpu::ERPImpl;
-    use crate::utils;
+    use crate::kernels::{erp_distance::cpu::ERPImpl, lcss_distance::cpu::LCSSImpl};
     use crate::warps::diamond_partitioning_gpu;
     use crate::warps::GpuBatchMode;
-    use std::{fmt::Error, sync::Arc};
+    use std::sync::Arc;
 
     use vulkano::device::Queue;
     use vulkano::{
-        command_buffer::{
-            allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
-        },
-        descriptor_set::{
-            allocator::StandardDescriptorSetAllocator, DescriptorSet, WriteDescriptorSet,
-        },
-        device::{
-            physical::PhysicalDevice, Device, DeviceCreateInfo, DeviceExtensions, QueueCreateInfo,
-        },
-        pipeline::{
-            compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
-            ComputePipeline, Pipeline, PipelineBindPoint, PipelineLayout,
-            PipelineShaderStageCreateInfo,
-        },
-        sync::{self, GpuFuture},
+        command_buffer::allocator::StandardCommandBufferAllocator,
+        descriptor_set::allocator::StandardDescriptorSetAllocator, device::Device,
     };
-
-    // const SHADER: &[u8] = include_bytes!(env!("tsdistances.spv"));
 
     pub fn erp<'a, M: GpuBatchMode>(
         device: Arc<Device>,
@@ -59,6 +41,29 @@ mod cpu {
             dsa,
             ERPImpl {
                 gap_penalty: gap_penalty as f32,
+            },
+            a,
+            b,
+            f32::INFINITY,
+        )
+    }
+
+    pub fn lcss<'a, M: GpuBatchMode>(
+        device: Arc<Device>,
+        queue: Arc<Queue>,
+        sba: Arc<StandardCommandBufferAllocator>,
+        dsa: Arc<StandardDescriptorSetAllocator>,
+        a: M::InputType<'a>,
+        b: M::InputType<'a>,
+        epsilon: f64,
+    ) -> M::ReturnType {
+        diamond_partitioning_gpu::<_, M>(
+            device,
+            queue,
+            sba,
+            dsa,
+            LCSSImpl {
+                epsilon: epsilon as f32,
             },
             a,
             b,

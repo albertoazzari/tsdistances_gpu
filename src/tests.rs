@@ -1,12 +1,27 @@
-use std::sync::Arc;
+use crate::{assert_eq_with_tol, warps::{MultiBatchMode, SingleBatchMode}};
+use csv::ReaderBuilder;
+use std::error::Error;
 
-use vulkano::{
-    command_buffer::allocator::StandardCommandBufferAllocator,
-    descriptor_set::allocator::StandardDescriptorSetAllocator,
-    device::{self, Device, DeviceCreateInfo, QueueCreateInfo},
-};
+fn read_csv<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn Error>>
+where
+    T: std::str::FromStr,
+    T::Err: 'static + Error, // needed to convert parsing error into Box<dyn Error>
+{
+    let mut reader = ReaderBuilder::new()
+        .has_headers(false)
+        .from_path(file_path)?;
 
-use crate::warps::{MultiBatchMode, SingleBatchMode};
+    let mut records = Vec::new();
+    for result in reader.records() {
+        let record = result?;
+        let row: Vec<T> = record
+            .iter()
+            .map(|s| s.parse::<T>())
+            .collect::<Result<Vec<_>, _>>()?;
+        records.push(row);
+    }
+    Ok(records)
+}
 
 #[test]
 fn test_device() {
@@ -17,41 +32,47 @@ fn test_device() {
         device.physical_device().properties().device_name
     );
 }
-
-// #[test]
-// fn test_shader() {
-//     use crate::utils;
-//     let shader = include_bytes!(env!("tsdistances.spv"));
-//     let (physical_device, device_extensions, queue_family_index) = utils::get_device();
-//     let result = compute_shader(
-//         shader,
-//         &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
-//         &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
-//         &mut [0.0; 10],
-//         physical_device.clone(),
-//         device_extensions,
-//         queue_family_index,
-//     );
-//     assert!(result.is_ok(), "Failed to run compute shader: {:?}", result);
-// }
-
 #[test]
 pub fn test_erp() {
     let (device, queue, sba, sda) = crate::utils::get_device();
 
-    let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
-    let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+    let ts = read_csv("tests/data/ts.csv").unwrap();
+    let erp_ts: Vec<Vec<f64>> = read_csv("tests/data/erp_ts.csv").unwrap();
+
     let gap_penalty = 1.0;
-    let result = crate::cpu::erp::<SingleBatchMode>(
+    let result = crate::cpu::erp::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
         sda.clone(),
-        &a,
-        &b,
+        &ts,
+        &ts,
         gap_penalty,
     );
 
-    println!("{:?}", result)
-    // assert_eq!(result, 0.0, "Failed to run ERP: {:?}", result);
+    for i in 0..ts.len()-1 {
+        for j in i+1..ts.len() {
+            assert_eq_with_tol!(result[i][j], erp_ts[i][j], 1e-6);
+        }
+    }
+}
+
+#[test]
+pub fn test_lcss() {
+    let (device, queue, sba, sda) = crate::utils::get_device();
+
+    let data = read_csv("tests/data/ts.csv").unwrap();
+
+    let espilon = 1.0;
+    let result = crate::cpu::lcss::<SingleBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        &data[0],
+        &data[1],
+        espilon,
+    );
+
+    assert_eq!(result, 0.752, "Failed to compute LCSS distance");
 }
