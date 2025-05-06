@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .print_metadata(MetadataPrintout::Full)
         .capability(Capability::Int64)
         .capability(Capability::Int8)
+        .release(true)
         .build()?;
     Ok(())
 }

@@ -43,7 +43,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::kernels::kernel_trait::{GpuKernelImpl, BatchInfo};
+                    use crate::{utils::move_gpu, kernels::kernel_trait::{GpuKernelImpl, BatchInfo}};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -51,7 +51,8 @@ macro_rules! warp_kernel_spec {
                         $(pub $param2: $ty2,)?
                         $(pub $param3: $ty3,)?
                         $(pub $param4: $ty4,)?
-                        $(pub $vec5:  vulkano::buffer::Subbuffer<$ty5>,)?
+                        $(pub $vec5:  [$ty5],)?
+                        // $(pub $vec5:  vulkano::buffer::Subbuffer<$ty5>,)?
                     }
 
                     impl GpuKernelImpl for $impl_struct {
@@ -106,7 +107,7 @@ macro_rules! warp_kernel_spec {
                                     WriteDescriptorSet::buffer(0, diagonal.clone()),
                                     WriteDescriptorSet::buffer(1, a.clone()),
                                     WriteDescriptorSet::buffer(2, b.clone()),
-                                    $(WriteDescriptorSet::buffer(3, self.$vec5.clone()),)?
+                                    $(WriteDescriptorSet::buffer(3, move_gpu(&self.$vec5, builder, device.clone())),)?
                                 ],
                                 [],
                             )
@@ -173,8 +174,6 @@ macro_rules! warp_kernel_spec {
 
                 #[cfg(target_arch = "spirv")]
                 use spirv_std::{glam::UVec3, spirv, num_traits::Float};
-
-
 
                 #[cfg(target_arch = "spirv")]
                 #[inline(always)]

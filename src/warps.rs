@@ -17,7 +17,7 @@ pub trait GpuBatchMode {
     const IS_BATCH: bool;
 
     type ReturnType;
-    type InputType<'a>;
+    type InputType<'a>: Copy;
 
     fn get_samples_count(input: &Self::InputType<'_>) -> usize;
     fn new_return(alen: usize, blen: usize) -> Self::ReturnType;
