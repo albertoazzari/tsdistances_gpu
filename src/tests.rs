@@ -166,6 +166,12 @@ pub fn test_msm() {
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
             assert_eq_with_tol!(result[i][j], msm_ts[i][j], 1e-6);
+            if (msm_ts[i][j] - 2141.099853515625).abs() < 1e-6 {
+                println!(
+                    "MSM result is not correct: {} vs {}",
+                    result[i][j], msm_ts[i][j]
+                );
+            }
         }
     }
 }

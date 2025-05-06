@@ -52,7 +52,7 @@ pub fn get_device() -> (
         .unwrap()
     });
     let device_extensions = DeviceExtensions {
-        khr_vulkan_memory_model: true,
+        // khr_vulkan_memory_model: true,
         khr_storage_buffer_storage_class: true,
         ..DeviceExtensions::empty()
     };
@@ -83,7 +83,7 @@ pub fn get_device() -> (
             enabled_extensions: device_extensions,
             enabled_features: {
                 let mut features = DeviceFeatures::default();
-                features.vulkan_memory_model = true;
+                // features.vulkan_memory_model = true;
                 features.shader_int64 = true;
                 features.shader_int8 = true;
                 features
