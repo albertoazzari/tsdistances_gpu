@@ -122,33 +122,33 @@ pub fn test_dtw() {
     }
 }
 
-// #[test]
-// pub fn test_wdtw() {
-//     let (device, queue, sba, sda) = crate::utils::get_device();
+#[test]
+pub fn test_wdtw() {
+    let (device, queue, sba, sda) = crate::utils::get_device();
 
-//     let g = 0.05;
-//     let data = read_csv("tests/data/ts.csv").unwrap();
-//     let wdtw_ts: Vec<Vec<f64>> = read_csv("tests/results/wdtw.csv").unwrap();
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::wdtw::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         &data,
-//         &data,
-//         &dtw_weights(data[0].len(), g),
-//     );
-//     println!("GPU WDTW time: {:?}", start_time.elapsed());
-//     for i in 0..data.len() - 1 {
-//         for j in i + 1..data.len() {
-//             assert_eq_with_tol!(result[i][j], wdtw_ts[i][j], 1e-6);
-//         }
-//     }
-// }
+    let g = 0.05;
+    let data = read_csv("tests/data/ts.csv").unwrap();
+    let wdtw_ts: Vec<Vec<f64>> = read_csv("tests/results/wdtw.csv").unwrap();
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::wdtw::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        &data,
+        &data,
+        &dtw_weights(data[0].len(), g),
+    );
+    println!("GPU WDTW time: {:?}", start_time.elapsed());
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], wdtw_ts[i][j], 1e-6);
+        }
+    }
+}
 
 #[test]
-pub fn test_msm(){
+pub fn test_msm() {
     let (device, queue, sba, sda) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
@@ -171,7 +171,7 @@ pub fn test_msm(){
 }
 
 #[test]
-pub fn test_twe(){
+pub fn test_twe() {
     let (device, queue, sba, sda) = crate::utils::get_device();
     let stiffness = 0.001;
     let penalty = 1.0;
@@ -199,7 +199,7 @@ pub fn test_twe(){
 #[test]
 pub fn test_adtw() {
     let (device, queue, sba, sda) = crate::utils::get_device();
-    let warp_penalty=0.1;
+    let warp_penalty = 0.1;
     let data = read_csv("tests/data/ts.csv").unwrap();
     let adtw_ts: Vec<Vec<f64>> = read_csv("tests/results/adtw.csv").unwrap();
     let start_time = std::time::Instant::now();
@@ -210,7 +210,7 @@ pub fn test_adtw() {
         sda.clone(),
         &data,
         &data,
-        warp_penalty
+        warp_penalty,
     );
     println!("GPU ADTW time: {:?}", start_time.elapsed());
     for i in 0..data.len() - 1 {

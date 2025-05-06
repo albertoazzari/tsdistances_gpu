@@ -159,20 +159,15 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         (a, b)
     };
 
-    let max_subgroup_threads: usize = device
-        .physical_device()
-        .properties()
-        .max_subgroup_size
-        .unwrap() as usize;
+    let props = device.physical_device().properties();
+
+    let max_subgroup_threads: usize = props.max_subgroup_size.unwrap_or(32) as usize;
 
     let a_sample_length = M::get_sample_length(&a);
 
     let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_threads);
 
-    let max_buffer_size = device
-        .physical_device()
-        .properties()
-        .max_storage_buffer_range as usize;
+    let max_buffer_size = props.max_storage_buffer_range as usize;
 
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
 
