@@ -6,6 +6,7 @@ pub mod kernels;
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
 #[cfg(not(target_arch = "spirv"))]
+#[cfg(test)]
 mod tests;
 #[cfg(not(target_arch = "spirv"))]
 mod utils;
@@ -105,7 +106,7 @@ mod cpu {
             queue,
             sba,
             dsa,
-            WDTWImpl { weights: weights},
+            WDTWImpl { weights: weights },
             a,
             b,
             f32::INFINITY,

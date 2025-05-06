@@ -43,7 +43,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{utils::move_gpu, kernels::kernel_trait::{GpuKernelImpl, BatchInfo}};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -51,11 +51,27 @@ macro_rules! warp_kernel_spec {
                         $(pub $param2: $ty2,)?
                         $(pub $param3: $ty3,)?
                         $(pub $param4: $ty4,)?
-                        $(pub $vec5:  [$ty5],)?
-                        // $(pub $vec5:  vulkano::buffer::Subbuffer<$ty5>,)?
+                        $(pub $vec5:  Vec<$ty5>,)?
+                    }
+
+                    pub struct KernelParams {
+                        $(pub $vec5:  Subbuffer<[$ty5]>)?
                     }
 
                     impl GpuKernelImpl for $impl_struct {
+
+                        type KernelParams = KernelParams;
+
+                        fn build_kernel_params(
+                            &self,
+                            _device: Arc<Device>,
+                            _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+                        ) -> Self::KernelParams {
+                            KernelParams {
+                                $($vec5: crate::utils::move_gpu(&self.$vec5, _builder, _device.clone()))?
+                            }
+                        }
+
                         fn dispatch(
                             &self,
                             device: Arc<Device>,
@@ -73,6 +89,7 @@ macro_rules! warp_kernel_spec {
                             b: &Subbuffer<[f32]>,
                             diagonal: &mut Subbuffer<[f32]>,
                             batch_info: Option<BatchInfo>,
+                            _kernel_params: &Self::KernelParams,
                         ) {
                             let (kernel_name, padded_a_len, padded_b_len, threads_count) = match batch_info {
                                 Some(batch_info) =>
@@ -107,7 +124,7 @@ macro_rules! warp_kernel_spec {
                                     WriteDescriptorSet::buffer(0, diagonal.clone()),
                                     WriteDescriptorSet::buffer(1, a.clone()),
                                     WriteDescriptorSet::buffer(2, b.clone()),
-                                    $(WriteDescriptorSet::buffer(3, move_gpu(&self.$vec5, builder, device.clone())),)?
+                                    $(WriteDescriptorSet::buffer(3, _kernel_params.$vec5.clone()),)?
                                 ],
                                 [],
                             )
@@ -423,6 +440,14 @@ pub mod kernel_trait {
     }
 
     pub trait GpuKernelImpl {
+        type KernelParams;
+
+        fn build_kernel_params(
+            &self,
+            device: Arc<Device>,
+            builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        ) -> Self::KernelParams;
+
         fn dispatch(
             &self,
             device: Arc<Device>,
@@ -440,6 +465,7 @@ pub mod kernel_trait {
             b: &Subbuffer<[f32]>,
             diagonal: &mut Subbuffer<[f32]>,
             batch_info: Option<BatchInfo>,
+            kernel_params: &Self::KernelParams,
         );
     }
 }

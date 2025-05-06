@@ -259,6 +259,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     let b_gpu = move_gpu(&b, &mut builder, device.clone());
     let mut diagonal = move_gpu(&diagonal, &mut builder, device.clone());
 
+    let kernel_params = params.build_kernel_params(device.clone(), &mut builder);
+
     // Number of kernel calls
     for i in 0..rows_count {
         params.dispatch(
@@ -284,6 +286,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
             } else {
                 None
             },
+            &kernel_params,
         );
 
         if i < (a_diamonds - 1) {
