@@ -43,7 +43,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, utils::move_cpu};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
