@@ -1,17 +1,18 @@
+use crate::Precision;
 pub struct GpuMatrix<'a> {
-    diagonal: &'a mut [f32],
+    diagonal: &'a mut [Precision],
     diagonal_offset: usize,
     mask: usize,
 }
 
 impl GpuMatrix<'_> {
     #[inline(always)]
-    fn get_diagonal_cell(&self, _diag_row: usize, diag_offset: isize) -> f32 {
+    fn get_diagonal_cell(&self, _diag_row: usize, diag_offset: isize) -> Precision {
         self.diagonal[self.diagonal_offset + (diag_offset as usize & self.mask)]
     }
 
     #[inline(always)]
-    fn set_diagonal_cell(&mut self, _diag_row: usize, diag_offset: isize, value: f32) {
+    fn set_diagonal_cell(&mut self, _diag_row: usize, diag_offset: isize, value: Precision) {
         self.diagonal[self.diagonal_offset + (diag_offset as usize & self.mask)] = value;
     }
 }
@@ -35,6 +36,8 @@ macro_rules! warp_kernel_spec {
     )*) => {
         $(
             pub mod $name {
+                use crate::Precision;
+
                 #[cfg(not(target_arch = "spirv"))]
                 pub mod cpu {
                     use std::sync::Arc;
@@ -43,7 +46,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, utils::move_cpu};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, utils::move_cpu, Precision};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -85,9 +88,9 @@ macro_rules! warp_kernel_spec {
                             a_len: u64,
                             b_len: u64,
                             max_subgroup_threads: u64,
-                            a: &Subbuffer<[f32]>,
-                            b: &Subbuffer<[f32]>,
-                            diagonal: &mut Subbuffer<[f32]>,
+                            a: &Subbuffer<[Precision]>,
+                            b: &Subbuffer<[Precision]>,
+                            diagonal: &mut Subbuffer<[Precision]>,
                             batch_info: Option<BatchInfo>,
                             _kernel_params: &Self::KernelParams,
                         ) {
@@ -203,8 +206,8 @@ macro_rules! warp_kernel_spec {
                     diag_count: u64,
                     warp: u64,
                     max_subgroup_threads: u64,
-                    $a: &[f32],
-                    $b: &[f32],
+                    $a: &[Precision],
+                    $b: &[Precision],
                     $a_offset: usize,
                     $b_offset: usize,
                     $($param1: $ty1,)?
@@ -262,11 +265,11 @@ macro_rules! warp_kernel_spec {
                     a_len: u64,
                     b_len: u64,
                     max_subgroup_threads: u64,
-                    diagonal: &mut [f32],
+                    diagonal: &mut [Precision],
                     diagonal_offset: u64,
                     diagonal_len: u64,
-                    $a: &[f32],
-                    $b: &[f32],
+                    $a: &[Precision],
+                    $b: &[Precision],
                     $a_offset: usize,
                     $b_offset: usize,
                     $($param1: $ty1,)?
@@ -321,9 +324,9 @@ macro_rules! warp_kernel_spec {
                 pub fn single_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [f32],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[f32],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[f32],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [Precision],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[Precision],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[Precision],
                     $(#[spirv(storage_buffer, descriptor_set = 0, binding = 3)] vec5: &[$ty5],)?
                 ) {
 
@@ -366,9 +369,9 @@ macro_rules! warp_kernel_spec {
                 pub fn batch_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [f32],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[f32],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[f32],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [Precision],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[Precision],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[Precision],
                     $(#[spirv(storage_buffer, descriptor_set = 0, binding = 3)] vec5: &[$ty5],)?
                 ) {
 
@@ -434,6 +437,8 @@ pub mod kernel_trait {
     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
     use vulkano::device::Device;
 
+    use crate::Precision;
+
     pub struct BatchInfo {
         pub padded_a_len: u64,
         pub padded_b_len: u64,
@@ -461,35 +466,35 @@ pub mod kernel_trait {
             a_len: u64,
             b_len: u64,
             max_subgroup_threads: u64,
-            a: &Subbuffer<[f32]>,
-            b: &Subbuffer<[f32]>,
-            diagonal: &mut Subbuffer<[f32]>,
+            a: &Subbuffer<[Precision]>,
+            b: &Subbuffer<[Precision]>,
+            diagonal: &mut Subbuffer<[Precision]>,
             batch_info: Option<BatchInfo>,
             kernel_params: &Self::KernelParams,
         );
     }
 }
 
-const MSM_C: f32 = 1.0;
+const MSM_C: Precision = 1.0;
 #[inline(always)]
-pub fn msm_cost_function(x: f32, y: f32, z: f32) -> f32 {
+pub fn msm_cost_function(x: Precision, y: Precision, z: Precision) -> Precision {
     MSM_C + (y.min(z) - x).max(x - y.max(z)).max(0.0)
 }
 
 warp_kernel_spec! {
-    fn erp_distance[ERPImpl](a[a_offset], b[b_offset], i, j, x, y, z, [gap_penalty: f32], [], [], [], []) {
+    fn erp_distance[ERPImpl](a[a_offset], b[b_offset], i, j, x, y, z, [gap_penalty: Precision], [], [], [], []) {
         (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
         .min((z + (a[a_offset + i as usize] - gap_penalty).abs()).min(x + (b[b_offset + j as usize] - gap_penalty).abs()))
     }
-    fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: f32], [], [], [], []) {
+    fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: Precision], [], [], [], []) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
-        (dist <= epsilon) as i32 as f32 * (y + 1.0) + (dist > epsilon) as i32 as f32 * x.max(z)
+        (dist <= epsilon) as i32 as Precision * (y + 1.0) + (dist > epsilon) as i32 as Precision * x.max(z)
     }
     fn dtw_distance[DTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
         dist + z.min(x.min(y))
     }
-    fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: f32]) {
+    fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: Precision]) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2) * weights[(i as i32 - j as i32).abs() as usize];
         dist + x.min(y.min(z))
     }
@@ -502,7 +507,7 @@ warp_kernel_spec! {
             x + super::msm_cost_function(b[b_offset + j as usize], a[a_offset + i as usize], if j == 0 {0.0} else {b[b_offset + j as usize - 1]}),
         )
     }
-    fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: f32], [penalty: f32], [], [], []) {
+    fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: Precision], [penalty: Precision], [], [], []) {
         let delete_addition = penalty + stiffness;
         // deletion in a
         let del_a =
@@ -520,7 +525,7 @@ warp_kernel_spec! {
         let match_a_b = y
             + match_current
             + match_previous
-            + stiffness * (2.0 * (i as isize - j as isize).abs() as f32);
+            + stiffness * (2.0 * (i as isize - j as isize).abs() as Precision);
 
         del_a.min(del_b.min(match_a_b))
     }

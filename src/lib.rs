@@ -2,6 +2,7 @@
 #![allow(unexpected_cfgs)]
 
 pub mod kernels;
+pub type Precision = f32;
 
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
@@ -23,6 +24,7 @@ mod cpu {
     use crate::kernels::{erp_distance::cpu::ERPImpl, lcss_distance::cpu::LCSSImpl};
     use crate::warps::diamond_partitioning_gpu;
     use crate::warps::GpuBatchMode;
+    use crate::Precision;
     use std::sync::Arc;
 
     use vulkano::device::Queue;
@@ -38,7 +40,7 @@ mod cpu {
         dsa: Arc<StandardDescriptorSetAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        gap_penalty: f64,
+        gap_penalty: Precision,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -46,11 +48,11 @@ mod cpu {
             sba,
             dsa,
             ERPImpl {
-                gap_penalty: gap_penalty as f32,
+                gap_penalty: gap_penalty as Precision,
             },
             a,
             b,
-            f32::INFINITY,
+            Precision::INFINITY,
         )
     }
 
@@ -61,7 +63,7 @@ mod cpu {
         dsa: Arc<StandardDescriptorSetAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        epsilon: f64,
+        epsilon: Precision,
     ) -> M::ReturnType {
         let similarity = diamond_partitioning_gpu::<_, M>(
             device,
@@ -69,13 +71,14 @@ mod cpu {
             sba,
             dsa,
             LCSSImpl {
-                epsilon: epsilon as f32,
+                epsilon: epsilon as Precision,
             },
             a,
             b,
             0.0,
         );
-        let min_len = M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as f64;
+        let min_len =
+            M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as Precision;
         M::apply_fn(similarity, |s| 1.0 - s / min_len)
     }
 
@@ -87,7 +90,16 @@ mod cpu {
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(device, queue, sba, dsa, DTWImpl {}, a, b, f32::INFINITY)
+        diamond_partitioning_gpu::<_, M>(
+            device,
+            queue,
+            sba,
+            dsa,
+            DTWImpl {},
+            a,
+            b,
+            Precision::INFINITY,
+        )
     }
 
     pub fn wdtw<'a, M: GpuBatchMode>(
@@ -97,9 +109,12 @@ mod cpu {
         dsa: Arc<StandardDescriptorSetAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        weights: &[f64],
+        weights: &[Precision],
     ) -> M::ReturnType {
-        let weights = weights.iter().map(|x| *x as f32).collect::<Vec<f32>>();
+        let weights = weights
+            .iter()
+            .map(|x| *x as Precision)
+            .collect::<Vec<Precision>>();
 
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -109,7 +124,7 @@ mod cpu {
             WDTWImpl { weights: weights },
             a,
             b,
-            f32::INFINITY,
+            Precision::INFINITY,
         )
     }
 
@@ -121,7 +136,16 @@ mod cpu {
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(device, queue, sba, dsa, MSMImpl {}, a, b, f32::INFINITY)
+        diamond_partitioning_gpu::<_, M>(
+            device,
+            queue,
+            sba,
+            dsa,
+            MSMImpl {},
+            a,
+            b,
+            Precision::INFINITY,
+        )
     }
 
     pub fn twe<'a, M: GpuBatchMode>(
@@ -131,8 +155,8 @@ mod cpu {
         dsa: Arc<StandardDescriptorSetAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        stiffness: f64,
-        penalty: f64,
+        stiffness: Precision,
+        penalty: Precision,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -140,12 +164,12 @@ mod cpu {
             sba,
             dsa,
             TWEImpl {
-                stiffness: stiffness as f32,
-                penalty: penalty as f32,
+                stiffness: stiffness as Precision,
+                penalty: penalty as Precision,
             },
             a,
             b,
-            f32::INFINITY,
+            Precision::INFINITY,
         )
     }
 
@@ -156,17 +180,17 @@ mod cpu {
         dsa: Arc<StandardDescriptorSetAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        w: f64,
+        w: Precision,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
             queue,
             sba,
             dsa,
-            ADTWImpl { w: w as f32 },
+            ADTWImpl { w: w as Precision },
             a,
             b,
-            f32::INFINITY,
+            Precision::INFINITY,
         )
     }
 }

@@ -1,6 +1,7 @@
 use crate::{
     assert_eq_with_tol,
     warps::{MultiBatchMode, SingleBatchMode},
+    Precision,
 };
 use csv::ReaderBuilder;
 use std::error::Error;
@@ -26,13 +27,13 @@ where
     Ok(records)
 }
 
-const WEIGHT_MAX: f64 = 1.0;
-fn dtw_weights(len: usize, g: f64) -> Vec<f64> {
+const WEIGHT_MAX: Precision = 1.0;
+fn dtw_weights(len: usize, g: Precision) -> Vec<Precision> {
     let mut weights = vec![0.0; len];
-    let half_len = len as f64 / 2.0;
+    let half_len = len as Precision / 2.0;
     for i in 0..len {
-        weights[i] =
-            WEIGHT_MAX / (1.0 + std::f64::consts::E.powf(-g * (i as f64 - half_len as f64)));
+        weights[i] = WEIGHT_MAX
+            / (1.0 + std::f32::consts::E.powf(-g * (i as Precision - half_len as Precision)));
     }
     weights
 }
@@ -52,7 +53,7 @@ pub fn test_erp() {
     let (device, queue, sba, sda) = crate::utils::get_device();
 
     let ts = read_csv("tests/data/ts.csv").unwrap();
-    let erp_ts: Vec<Vec<f64>> = read_csv("tests/results/erp.csv").unwrap();
+    let erp_ts: Vec<Vec<f32>> = read_csv("tests/results/erp.csv").unwrap();
 
     let gap_penalty = 1.0;
     let start_time = std::time::Instant::now();
@@ -79,7 +80,7 @@ pub fn test_lcss() {
     let (device, queue, sba, sda) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let lcss_ts: Vec<Vec<f64>> = read_csv("tests/results/lcss.csv").unwrap();
+    let lcss_ts: Vec<Vec<f32>> = read_csv("tests/results/lcss.csv").unwrap();
     let epsilon = 1.0;
     let start_time = std::time::Instant::now();
     let result = crate::cpu::lcss::<MultiBatchMode>(
@@ -104,7 +105,7 @@ pub fn test_dtw() {
     let (device, queue, sba, sda) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let dtw_ts: Vec<Vec<f64>> = read_csv("tests/results/dtw.csv").unwrap();
+    let dtw_ts: Vec<Vec<f32>> = read_csv("tests/results/dtw.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::dtw::<MultiBatchMode>(
         device.clone(),
@@ -128,7 +129,7 @@ pub fn test_wdtw() {
 
     let g = 0.05;
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let wdtw_ts: Vec<Vec<f64>> = read_csv("tests/results/wdtw.csv").unwrap();
+    let wdtw_ts: Vec<Vec<f32>> = read_csv("tests/results/wdtw.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::wdtw::<MultiBatchMode>(
         device.clone(),
@@ -152,7 +153,7 @@ pub fn test_msm() {
     let (device, queue, sba, sda) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let msm_ts: Vec<Vec<f64>> = read_csv("tests/results/msm.csv").unwrap();
+    let msm_ts: Vec<Vec<f32>> = read_csv("tests/results/msm.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::msm::<MultiBatchMode>(
         device.clone(),
@@ -182,7 +183,7 @@ pub fn test_twe() {
     let stiffness = 0.001;
     let penalty = 1.0;
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let twe_ts: Vec<Vec<f64>> = read_csv("tests/results/twe.csv").unwrap();
+    let twe_ts: Vec<Vec<f32>> = read_csv("tests/results/twe.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::twe::<MultiBatchMode>(
         device.clone(),
@@ -207,7 +208,7 @@ pub fn test_adtw() {
     let (device, queue, sba, sda) = crate::utils::get_device();
     let warp_penalty = 0.1;
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let adtw_ts: Vec<Vec<f64>> = read_csv("tests/results/adtw.csv").unwrap();
+    let adtw_ts: Vec<Vec<f32>> = read_csv("tests/results/adtw.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::adtw::<MultiBatchMode>(
         device.clone(),
@@ -219,16 +220,4 @@ pub fn test_adtw() {
         warp_penalty,
     );
     println!("GPU ADTW time: {:?}", start_time.elapsed());
-    let mut wrong_count = 0;
-    for i in 0..data.len() - 1 {
-        for j in i + 1..data.len() {
-            println!("adtw: {} {}", i, j);
-            if (result[i][j] - adtw_ts[i][j]).abs() > 1e-3 {
-                wrong_count += 1;
-                // println!("adtw: {} {}", i, j);
-            }
-            // assert_eq_with_tol!(result[i][j], adtw_ts[i][j], 1e-6);
-        }
-    }
-    println!("adtw: wrong count {}", wrong_count);
 }
