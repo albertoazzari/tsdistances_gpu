@@ -15,12 +15,18 @@ fxhash = "0.2.1"
 bytemuck = { version = "1.22.0", features = ["derive"] }
 spirv-tools = "0.10.0"
 
+[profile.release]
+debug = true
+opt-level = 3
+codegen-units = 16
+
 [profile.release.build-override]
 opt-level = 3
 codegen-units = 16
 
 [profile.dev.build-override]
 opt-level = 3
+debug = true
 
 [target.'cfg(not(target_arch = "spirv"))'.dependencies]
 vulkano = { version = "0.35.1" }

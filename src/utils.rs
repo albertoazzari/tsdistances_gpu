@@ -52,7 +52,6 @@ pub fn get_device() -> (
         .unwrap()
     });
     let device_extensions = DeviceExtensions {
-        khr_vulkan_memory_model: true,
         khr_storage_buffer_storage_class: true,
         ..DeviceExtensions::empty()
     };
