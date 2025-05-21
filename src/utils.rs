@@ -38,6 +38,7 @@ pub fn get_device() -> (
     Arc<Queue>,
     Arc<StandardCommandBufferAllocator>,
     Arc<StandardDescriptorSetAllocator>,
+    Arc<StandardMemoryAllocator>,
 ) {
     let cell = OnceCell::new();
     let instance = cell.get_or_init(|| {
@@ -107,21 +108,22 @@ pub fn get_device() -> (
         Default::default(),
     ));
 
+    let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+
     (
         device,
         queue,
         command_buffer_allocator,
         descriptor_set_allocator,
+        memory_allocator,
     )
 }
 
 pub fn move_gpu<T: BufferContents + Copy>(
     data: &[T],
     builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    device: Arc<Device>,
+    memory_allocator: &Arc<StandardMemoryAllocator>,
 ) -> Subbuffer<[T]> {
-    let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-
     // Create CPU-accessible source buffer
     let buffer_host = Buffer::from_iter(
         memory_allocator.clone(),

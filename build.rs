@@ -19,18 +19,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut optimizer = spirv_tools::opt::create(Some(target_env));
     optimizer.register_performance_passes();
 
-    let spirv = SpirvBuilder::new(".", "spirv-unknown-vulkan1.2")
+    let unoptimized_spirv = SpirvBuilder::new(".", "spirv-unknown-vulkan1.2")
         .print_metadata(MetadataPrintout::Full)
         .spirv_metadata(SpirvMetadata::None)
         .capability(Capability::Int64)
         .capability(Capability::Int8)
+        .release(false)
         .build()?;
 
-    let spirv_path = spirv.module.unwrap_single();
-
     let spirv_module =
-        rspirv::dr::load_bytes(std::fs::read(spirv_path)?).map_err(|e| e.to_string())?;
+        rspirv::dr::load_bytes(std::fs::read(unoptimized_spirv.module.unwrap_single())?)
+            .map_err(|e| e.to_string())?;
 
+    let entry_fns: FxHashSet<u32> = spirv_module
+        .entry_points
+        .iter()
+        .map(|inst| inst.operands[1].unwrap_id_ref())
+        .collect();
+
+    // for entry_point in &spirv_module.entry_points {
+    //     let entry_id = entry_point.operands[1].unwrap_id_ref();
+    //     let execution_mode = spirv_module
+    //         .execution_modes
+    //         .iter()
+    //         .find(|inst| inst.operands.first().unwrap().unwrap_id_ref() == entry_id)
+    //         .unwrap();
+    //     let functions = spirv_module
+    //         .functions
+    //         .iter()
+    //         .filter(|f| {
+    //             let id = f.def.as_ref().unwrap().result_id.unwrap();
+    //             id == entry_id || !entry_fns.contains(&id)
+    //         })
+    //         .cloned()
+    //         .collect();
+
+    //     let spirv_module = Module {
+    //         entry_points: vec![entry_point.clone()],
+    //         execution_modes: vec![execution_mode.clone()],
+    //         functions,
+    //         ..spirv_module.clone()
+    //     };
     let spirv = spirv_module.assemble();
     let optimized = optimizer
         .optimize(spirv, &mut |_| (), None)
@@ -38,6 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     validator
         .validate(&optimized, None)
         .expect("Failed to validate SPIR-V");
-    fs::write(spirv_path, &optimized).expect("Failed to write optimized SPIR-V");
+
+    std::fs::write(unoptimized_spirv.module.unwrap_single(), optimized)?;
+
+    // }
     Ok(())
 }
