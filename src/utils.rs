@@ -1,7 +1,10 @@
 use std::{cell::OnceCell, sync::Arc};
 
 use vulkano::{
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::{
+        allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
+        Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer,
+    },
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CopyBufferInfo,
         PrimaryAutoCommandBuffer,
@@ -38,7 +41,7 @@ pub fn get_device() -> (
     Arc<Queue>,
     Arc<StandardCommandBufferAllocator>,
     Arc<StandardDescriptorSetAllocator>,
-    Arc<StandardMemoryAllocator>,
+    Arc<SubbufferAllocator>,
 ) {
     let cell = OnceCell::new();
     let instance = cell.get_or_init(|| {
@@ -109,110 +112,109 @@ pub fn get_device() -> (
     ));
 
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-
+    let buffer_allocator = Arc::new(SubbufferAllocator::new(
+        memory_allocator.clone(),
+        SubbufferAllocatorCreateInfo {
+            buffer_usage: BufferUsage::TRANSFER_DST
+                | BufferUsage::STORAGE_BUFFER
+                | BufferUsage::TRANSFER_SRC,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+    ));
     (
         device,
         queue,
         command_buffer_allocator,
         descriptor_set_allocator,
-        memory_allocator,
+        buffer_allocator,
     )
 }
 
 pub fn move_gpu<T: BufferContents + Copy>(
     data: &[T],
     builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    memory_allocator: &Arc<StandardMemoryAllocator>,
+    subbuffer_allocator: &Arc<SubbufferAllocator>,
 ) -> Subbuffer<[T]> {
-    let start_time = std::time::Instant::now();
-    // Create CPU-accessible source buffer
-    let buffer_host = Buffer::from_iter(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::TRANSFER_SRC,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        data.iter().cloned(),
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "Failed to create host buffer of len {}\n {:?}",
-            data.len(),
-            e
-        );
-    });
-
-    println!("Buffer creation time: {:?}", start_time.elapsed());
-
-    // Create GPU-side destination buffer with TRANSFER_SRC for later readback
-    let buffer_device = Buffer::new_slice(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::TRANSFER_DST
-                | BufferUsage::STORAGE_BUFFER
-                | BufferUsage::TRANSFER_SRC,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-            allocate_preference: MemoryAllocatePreference::AlwaysAllocate,
-            ..Default::default()
-        },
-        data.len() as u64,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "Failed to create device buffer of len {}\n {:?}",
-            data.len(),
-            e
-        );
-    });
-
-    println!("Buffer creation time: {:?}", start_time.elapsed());
-
-    builder
-        .copy_buffer(CopyBufferInfo::buffers(buffer_host, buffer_device.clone()))
+    let buffer = subbuffer_allocator
+        .allocate_slice(data.len() as u64)
         .unwrap();
+    buffer.write().unwrap().copy_from_slice(&data);
+    buffer
 
-    println!("Buffer copy time: {:?}, len: {}", start_time.elapsed(), data.len());
+    //     let start_time = std::time::Instant::now();
+    //     // Create CPU-accessible source buffer
+    //     let buffer_host = Buffer::from_iter(
+    //         memory_allocator.clone(),
+    //         BufferCreateInfo {
+    //             usage: BufferUsage::TRANSFER_SRC,
+    //             ..Default::default()
+    //         },
+    //         AllocationCreateInfo {
+    //             memory_type_filter: MemoryTypeFilter::PREFER_HOST
+    //                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+    //             ..Default::default()
+    //         },
+    //         data.iter().cloned(),
+    //     )
+    //     .unwrap_or_else(|e| {
+    //         panic!(
+    //             "Failed to create host buffer of len {}\n {:?}",
+    //             data.len(),
+    //             e
+    //         );
+    //     });
 
-    buffer_device
+    //     println!("Buffer creation time: {:?}", start_time.elapsed());
+
+    //     // Create GPU-side destination buffer with TRANSFER_SRC for later readback
+    //     let buffer_device = Buffer::new_slice(
+    //         memory_allocator.clone(),
+    //         BufferCreateInfo {
+    //             usage: BufferUsage::TRANSFER_DST
+    //                 | BufferUsage::STORAGE_BUFFER
+    //                 | BufferUsage::TRANSFER_SRC,
+    //             ..Default::default()
+    //         },
+    //         AllocationCreateInfo {
+    //             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+    //             allocate_preference: MemoryAllocatePreference::AlwaysAllocate,
+    //             ..Default::default()
+    //         },
+    //         data.len() as u64,
+    //     )
+    //     .unwrap_or_else(|e| {
+    //         panic!(
+    //             "Failed to create device buffer of len {}\n {:?}",
+    //             data.len(),
+    //             e
+    //         );
+    //     });
+
+    //     println!("Buffer creation time: {:?}", start_time.elapsed());
+
+    //     builder
+    //         .copy_buffer(CopyBufferInfo::buffers(buffer_host, buffer_device.clone()))
+    //         .unwrap();
+
+    //     println!(
+    //         "Buffer copy time: {:?}, len: {}",
+    //         start_time.elapsed(),
+    //         data.len()
+    //     );
 }
 
-pub fn move_cpu<T: BufferContents + Copy>(
-    buffer_device: Subbuffer<[T]>,
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    memory_allocator: &Arc<StandardMemoryAllocator>,
-) -> Subbuffer<[T]> {
-    // Create a host-visible buffer for receiving the data
-    let buffer_host = Buffer::new_slice(
-        memory_allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::TRANSFER_DST, // Changed from TRANSFER_SRC to TRANSFER_DST
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-            ..Default::default()
-        },
-        buffer_device.len(),
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "Failed to create host buffer for reading back data\n {:?}",
-            e
-        );
-    });
-
-    builder
-        .copy_buffer(CopyBufferInfo::buffers(buffer_device, buffer_host.clone()))
-        .unwrap();
-
-    buffer_host
-}
+// ELAPSED PART 1: 11.690217ms
+// Buffer creation time: 59.694514ms
+// Buffer creation time: 59.787637ms
+// Buffer copy time: 59.792759ms, len: 33600
+// ELAPSED PART 2: 71.490509ms
+// Buffer creation time: 20.088µs
+// Buffer creation time: 69.78µs
+// Buffer copy time: 73.161µs, len: 33600
+// ELAPSED PART 3: 71.566189ms
+// Buffer creation time: 15.622723ms
+// Buffer creation time: 15.745119ms
+// Buffer copy time: 15.749718ms, len: 11520000
+// ELAPSED PART 4: 87.318631ms

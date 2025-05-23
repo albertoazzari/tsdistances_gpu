@@ -185,40 +185,41 @@ fn test_device() {
 
 #[test]
 pub fn test_twe() {
-    let start_time = std::time::Instant::now();
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
     let stiffness = 0.001;
     let penalty = 1.0;
     let data: Vec<Vec<f32>> = read_csv("tests/data/ts.csv").unwrap();
     let twe_ts: Vec<Vec<f32>> = read_csv("tests/results/twe.csv").unwrap();
+    let runs = 2;
+    let mut avg_time = 0.0;
 
-    dbg!(data.len()); // 150
-    dbg!(data[0].len()); // 200
+    for _ in 0..runs {
+        let start_time = std::time::Instant::now();
+        let (device, queue, sba, sda, sa) = crate::utils::get_device();
 
-    let result = crate::cpu::twe::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &data,
-        &data,
-        stiffness,
-        penalty,
-    );
-    println!("GPU TWE time: {:?}", start_time.elapsed());
-
-    let sum = result
-        .iter()
-        .map(|v| v.iter().map(|x| *x as f64).sum::<f64>())
-        .sum::<f64>();
-    println!("SUM: {}", sum);
-    for i in 0..data.len() - 1 {
-        for j in i + 1..data.len() {
-            assert_eq_with_tol!(result[i][j], twe_ts[i][j], 1e-6);
+        let result = crate::cpu::twe::<MultiBatchMode>(
+            device.clone(),
+            queue.clone(),
+            sba.clone(),
+            sda.clone(),
+            sa.clone(),
+            &data,
+            &data,
+            stiffness,
+            penalty,
+        );
+        avg_time += start_time.elapsed().as_secs_f64();
+        let sum = result
+            .iter()
+            .map(|v| v.iter().map(|x| *x as f64).sum::<f64>())
+            .sum::<f64>();
+        println!("SUM: {}", sum);
+        for i in 0..data.len() - 1 {
+            for j in i + 1..data.len() {
+                assert_eq_with_tol!(result[i][j], twe_ts[i][j], 1e-6);
+            }
         }
     }
-    // println!("FINISHED");
+    println!("GPU TWE time: {:?}", avg_time / runs as f64);
 }
 
 // #[test]

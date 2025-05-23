@@ -1,5 +1,5 @@
-use std::env;
 use spirv_builder::{Capability, MetadataPrintout, SpirvBuilder, SpirvMetadata};
+use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default() == "spirv" {

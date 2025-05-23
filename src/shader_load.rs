@@ -69,9 +69,6 @@ fn load(device: Arc<Device>, shader: &[u8]) -> Result<Arc<ShaderModule>, Validat
         .validate(&optimized, None)
         .expect("Failed to validate SPIR-V");
 
-    std::fs::write("/tmp/optimized_shader.spv", optimized.as_bytes())
-        .expect("Failed to write optimized SPIR-V to file");
-
     // Create the ShaderModule with the optimized SPIR-V
     unsafe { ShaderModule::new(device, ShaderModuleCreateInfo::new(&optimized.as_words())) }
 }

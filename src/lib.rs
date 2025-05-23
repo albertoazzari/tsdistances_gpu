@@ -27,6 +27,7 @@ mod cpu {
     use crate::Precision;
     use std::sync::Arc;
 
+    use vulkano::buffer::allocator::SubbufferAllocator;
     use vulkano::device::Queue;
     use vulkano::memory::allocator::StandardMemoryAllocator;
     use vulkano::{
@@ -164,7 +165,7 @@ mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        ma: Arc<StandardMemoryAllocator>,
+        sa: Arc<SubbufferAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
         stiffness: Precision,
@@ -175,7 +176,7 @@ mod cpu {
             queue,
             sba,
             dsa,
-            ma,
+            sa,
             TWEImpl {
                 stiffness: stiffness as Precision,
                 penalty: penalty as Precision,

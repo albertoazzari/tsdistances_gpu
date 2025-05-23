@@ -46,7 +46,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, utils::move_cpu, Precision};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, Precision};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -67,7 +67,7 @@ macro_rules! warp_kernel_spec {
 
                         fn build_kernel_params(
                             &self,
-                            _allocator: Arc<vulkano::memory::allocator::StandardMemoryAllocator>,
+                            _allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
                             _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                         ) -> Self::KernelParams {
                             KernelParams {
@@ -460,7 +460,7 @@ pub mod kernel_trait {
 
         fn build_kernel_params(
             &self,
-            allocator: Arc<vulkano::memory::allocator::StandardMemoryAllocator>,
+            allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
             builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         ) -> Self::KernelParams;
 
