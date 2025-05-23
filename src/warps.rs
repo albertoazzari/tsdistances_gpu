@@ -106,6 +106,8 @@ impl GpuBatchMode for MultiBatchMode {
 
     fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Precision> {
         let single_padded_len = Self::get_padded_len(Self::get_sample_length(input), pad_stride);
+        dbg!(single_padded_len);
+        dbg!(input.len(), single_padded_len, input[0].len());
         let mut padded = vec![0.0; input.len() * single_padded_len];
         for i in 0..input.len() {
             for j in 0..input[i].len() {
@@ -116,6 +118,8 @@ impl GpuBatchMode for MultiBatchMode {
     }
 
     fn get_sample_length(input: &Self::InputType<'_>) -> usize {
+        println!("AAAA {} => {}", input.len(), input[0].len());
+
         input.first().map_or(0, |x| x.len())
     }
 
@@ -159,27 +163,32 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     b: M::InputType<'a>,
     init_val: Precision,
 ) -> M::ReturnType {
-
     let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
         (b, a)
     } else {
         (a, b)
     };
 
-    let properties = device
-        .physical_device()
-        .properties();
-    
+    let properties = device.physical_device().properties();
+
     let max_threads_x = properties.max_compute_work_group_size[0];
+    let max_subgroup_threads: usize = properties.max_subgroup_size.unwrap() as usize;
+
     let max_storage_buffer_range = properties.max_storage_buffer_range;
 
     let a_sample_length = M::get_sample_length(&a);
 
-    let diag_len = compute_diag_len::<M>(a_sample_length, max_threads_x as usize);
+    println!("a_sample_length = {}", a_sample_length);
+
+    let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_threads);
+
+    dbg!(a_sample_length, max_threads_x, max_subgroup_threads);
 
     let max_buffer_size = max_storage_buffer_range as usize;
 
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
+
+    dbg!(diag_len, max_buffer_size, max_a_batch_size);
 
     if max_a_batch_size == 0 {
         println!("WARNING: The input is too large to be processed by the GPU, you could experience a runtime crash.");
@@ -193,8 +202,10 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     while start < a_len {
         let len = a_batch_size.min(a_len - start);
         let a = M::get_subslice(&a, start, len);
-        let a_padded = M::build_padded(&a, max_threads_x as usize);
-        let b_padded = M::build_padded(&b, max_threads_x as usize);
+        let a_padded = M::build_padded(&a, max_subgroup_threads as usize);
+        let b_padded = M::build_padded(&b, max_subgroup_threads as usize);
+
+        dbg!(a_padded.len(), b_padded.len());
 
         distances.push(diamond_partitioning_gpu_::<G, M>(
             device.clone(),
@@ -203,7 +214,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
             descriptor_set_allocator.clone(),
             memory_allocator.clone(),
             &params,
-            max_threads_x as usize,
+            max_subgroup_threads as usize,
             M::get_sample_length(&a),
             M::get_sample_length(&b),
             a_padded,
@@ -243,6 +254,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     let diag_len = compute_diag_len::<M>(a_sample_len, max_subgroup_threads);
 
     let mut diagonal = vec![init_val; a_count * b_count * diag_len];
+
+    dbg!(diagonal.len());
 
     for i in 0..(a_count * b_count) {
         diagonal[i * diag_len] = 0.0;

@@ -189,8 +189,12 @@ pub fn test_twe() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
     let stiffness = 0.001;
     let penalty = 1.0;
-    let data = read_csv("tests/data/ts.csv").unwrap();
+    let data: Vec<Vec<f32>> = read_csv("tests/data/ts.csv").unwrap();
     let twe_ts: Vec<Vec<f32>> = read_csv("tests/results/twe.csv").unwrap();
+
+    dbg!(data.len()); // 150
+    dbg!(data[0].len()); // 200
+
     let result = crate::cpu::twe::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -203,7 +207,7 @@ pub fn test_twe() {
         penalty,
     );
     println!("GPU TWE time: {:?}", start_time.elapsed());
-    
+
     let sum = result
         .iter()
         .map(|v| v.iter().map(|x| *x as f64).sum::<f64>())
