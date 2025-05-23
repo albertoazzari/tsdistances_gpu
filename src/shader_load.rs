@@ -16,18 +16,61 @@ static SHADE_PIPELINES: OnceLock<DashMap<&'static str, Arc<ComputePipeline>>> = 
 
 const SHADER_CODE: &[u8] = include_bytes!(env!("tsdistances.spv"));
 
+use rspirv::binary::Assemble;
+use rspirv::spirv::{ExecutionMode, Op};
+use spirv_tools::{opt::Optimizer, TargetEnv, val::Validator};
+
 fn load(device: Arc<Device>, shader: &[u8]) -> Result<Arc<ShaderModule>, Validated<VulkanError>> {
-    // convert from &[u8] to &[u32]
-    unsafe {
-        let shader = std::slice::from_raw_parts(
-            shader.as_ptr() as *const u32,
-            shader.len() / std::mem::size_of::<u32>(),
-        );
-        ShaderModule::new(device, ShaderModuleCreateInfo::new(shader)).map_err(|e| {
-            eprintln!("Failed to load shader module: {:?}", e);
-            e
-        })
-    }
+    // Load the SPIR-V module
+    let mut spirv_module = rspirv::dr::load_bytes(shader).expect("Failed to load SPIR-V module");
+    // Query the max threads in the x-dimension
+    let max_threads_x = device
+        .physical_device()
+        .properties()
+        .max_compute_work_group_size[0];
+
+    // Find the entry point ID (assumes one entry point)
+    let entry_point_id = spirv_module.entry_points[0].operands[1].unwrap_id_ref(); // Operand[1] is the function ID
+
+    // Remove existing LocalSize if needed
+    spirv_module.execution_modes.retain(|inst| {
+        !(inst.class.opcode == Op::ExecutionMode
+            && inst.operands[0].unwrap_id_ref() == entry_point_id
+            && inst.operands[1].unwrap_execution_mode() == ExecutionMode::LocalSize)
+    });
+
+    // Add a new LocalSize mode with max_threads_x
+    spirv_module
+        .execution_modes
+        .push(rspirv::dr::Instruction::new(
+            Op::ExecutionMode,
+            None,
+            None,
+            vec![
+                rspirv::dr::Operand::IdRef(entry_point_id),
+                rspirv::dr::Operand::ExecutionMode(ExecutionMode::LocalSize),
+                rspirv::dr::Operand::LiteralBit32(max_threads_x), // x dimension
+                rspirv::dr::Operand::LiteralBit32(1),             // y dimension
+                rspirv::dr::Operand::LiteralBit32(1),             // z dimension
+            ],
+        ));
+
+    let target_env = TargetEnv::Vulkan_1_2;
+    let validator = spirv_tools::val::create(Some(target_env));
+    let mut optimizer = spirv_tools::opt::create(Some(target_env));
+    optimizer.register_performance_passes();
+
+    // Optimize the SPIR-V
+    let spirv = spirv_module.assemble();
+    let optimized = optimizer
+        .optimize(spirv, &mut |_| (), None)
+        .expect("Failed to optimize SPIR-V");
+    validator
+        .validate(&optimized, None)
+        .expect("Failed to validate SPIR-V");
+
+    // Create the ShaderModule with the optimized SPIR-V
+    unsafe { ShaderModule::new(device, ShaderModuleCreateInfo::new(&optimized.as_words())) }
 }
 
 pub fn get_shader_entry_pipeline(device: Arc<Device>, name: &'static str) -> Arc<ComputePipeline> {

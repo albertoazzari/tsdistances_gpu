@@ -124,6 +124,7 @@ pub fn move_gpu<T: BufferContents + Copy>(
     builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     memory_allocator: &Arc<StandardMemoryAllocator>,
 ) -> Subbuffer<[T]> {
+    let start_time = std::time::Instant::now();
     // Create CPU-accessible source buffer
     let buffer_host = Buffer::from_iter(
         memory_allocator.clone(),
@@ -145,6 +146,8 @@ pub fn move_gpu<T: BufferContents + Copy>(
             e
         );
     });
+
+    println!("Buffer creation time: {:?}", start_time.elapsed());
 
     // Create GPU-side destination buffer with TRANSFER_SRC for later readback
     let buffer_device = Buffer::new_slice(
@@ -170,9 +173,13 @@ pub fn move_gpu<T: BufferContents + Copy>(
         );
     });
 
+    println!("Buffer creation time: {:?}", start_time.elapsed());
+
     builder
         .copy_buffer(CopyBufferInfo::buffers(buffer_host, buffer_device.clone()))
         .unwrap();
+
+    println!("Buffer copy time: {:?}, len: {}", start_time.elapsed(), data.len());
 
     buffer_device
 }
@@ -180,10 +187,9 @@ pub fn move_gpu<T: BufferContents + Copy>(
 pub fn move_cpu<T: BufferContents + Copy>(
     buffer_device: Subbuffer<[T]>,
     builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
-    device: Arc<Device>,
+    memory_allocator: &Arc<StandardMemoryAllocator>,
 ) -> Subbuffer<[T]> {
     // Create a host-visible buffer for receiving the data
-    let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
     let buffer_host = Buffer::new_slice(
         memory_allocator.clone(),
         BufferCreateInfo {

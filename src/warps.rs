@@ -159,7 +159,6 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     b: M::InputType<'a>,
     init_val: Precision,
 ) -> M::ReturnType {
-    println!("Start");
 
     let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
         (b, a)
@@ -167,15 +166,18 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         (a, b)
     };
 
-    let props = device.physical_device().properties();
-
-    let max_subgroup_threads: usize = props.max_subgroup_size.unwrap_or(32) as usize;
+    let properties = device
+        .physical_device()
+        .properties();
+    
+    let max_threads_x = properties.max_compute_work_group_size[0];
+    let max_storage_buffer_range = properties.max_storage_buffer_range;
 
     let a_sample_length = M::get_sample_length(&a);
 
-    let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_threads);
+    let diag_len = compute_diag_len::<M>(a_sample_length, max_threads_x as usize);
 
-    let max_buffer_size = props.max_storage_buffer_range as usize;
+    let max_buffer_size = max_storage_buffer_range as usize;
 
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
 
@@ -188,13 +190,11 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     let a_len = M::get_samples_count(&a);
     let mut distances = Vec::new();
 
-    let start_time = std::time::Instant::now();
-
     while start < a_len {
         let len = a_batch_size.min(a_len - start);
         let a = M::get_subslice(&a, start, len);
-        let a_padded = M::build_padded(&a, max_subgroup_threads);
-        let b_padded = M::build_padded(&b, max_subgroup_threads);
+        let a_padded = M::build_padded(&a, max_threads_x as usize);
+        let b_padded = M::build_padded(&b, max_threads_x as usize);
 
         distances.push(diamond_partitioning_gpu_::<G, M>(
             device.clone(),
@@ -203,7 +203,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
             descriptor_set_allocator.clone(),
             memory_allocator.clone(),
             &params,
-            max_subgroup_threads,
+            max_threads_x as usize,
             M::get_sample_length(&a),
             M::get_sample_length(&b),
             a_padded,
@@ -211,11 +211,9 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
             init_val,
             M::IS_BATCH,
         ));
-        println!("PARTIAL ELAPSED: {:?}", start_time.elapsed());
         start += len;
     }
     let x = M::join_results(distances);
-    println!("TOTAL ELAPSED: {:?}", start_time.elapsed());
     x
 }
 
@@ -250,8 +248,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         diagonal[i * diag_len] = 0.0;
     }
 
-    println!("ELAPSED PART1: {:?}", start_time.elapsed());
-
     let a_diamonds = padded_a_len.div_ceil(max_subgroup_threads);
     let b_diamonds = padded_b_len.div_ceil(max_subgroup_threads);
     let rows_count = (padded_a_len + padded_b_len).div_ceil(max_subgroup_threads) - 1;
@@ -268,13 +264,15 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     )
     .unwrap();
 
+    println!("ELAPSED PART 1: {:?}", start_time.elapsed());
     let a_gpu = move_gpu(&a, &mut builder, &memory_allocator);
+    println!("ELAPSED PART 2: {:?}", start_time.elapsed());
     let b_gpu = move_gpu(&b, &mut builder, &memory_allocator);
+    println!("ELAPSED PART 3: {:?}", start_time.elapsed());
     let mut diagonal = move_gpu(&diagonal, &mut builder, &memory_allocator);
-
+    println!("ELAPSED PART 4: {:?}", start_time.elapsed());
     let kernel_params = params.build_kernel_params(memory_allocator.clone(), &mut builder);
-
-    println!("ELAPSED PART2: {:?}", start_time.elapsed());
+    println!("ELAPSED PART 5: {:?}", start_time.elapsed());
 
     // Number of kernel calls
     for i in 0..rows_count {
@@ -304,22 +302,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
             &kernel_params,
         );
 
-        let command_buffer = builder.build().unwrap();
-        let future = vulkano::sync::now(device.clone())
-            .then_execute(queue.clone(), command_buffer)
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap();
-        future.wait(None).unwrap();
-        builder = AutoCommandBufferBuilder::primary(
-            command_buffer_allocator.clone(),
-            queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        )
-        .unwrap();
-
-        println!("ELAPSED CYCLE {}: {:?}", i, start_time.elapsed());
-
         if i < (a_diamonds - 1) {
             diamonds_count += 1;
             first_coord -= max_subgroup_threads as isize;
@@ -340,7 +322,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
 
-    let diagonal = move_cpu(diagonal, &mut builder, device.clone());
+    let diagonal = move_cpu(diagonal, &mut builder, &memory_allocator);
 
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
@@ -349,12 +331,11 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         .then_signal_fence_and_flush()
         .unwrap();
     future.wait(None).unwrap();
-    println!("EXEC TIME: {:?}", start_time.elapsed());
-
+    println!("FINISHED GPU EXEC: {:?}", start_time.elapsed());
     let mut res = M::new_return(a_count, b_count);
-
+    println!("PREPARE RESULT: {:?}", start_time.elapsed());
     let diagonal = diagonal.read().unwrap().to_vec();
-    println!("FINAL TIME: {:?}", start_time.elapsed());
+    println!("GET DIAGONAL: {:?}", start_time.elapsed());
 
     for i in 0..a_count {
         for j in 0..b_count {

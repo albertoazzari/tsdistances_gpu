@@ -13,7 +13,7 @@ spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git", version = "0
 rspirv = "0.12.0"
 fxhash = "0.2.1"
 bytemuck = { version = "1.22.0", features = ["derive"] }
-spirv-tools = "0.10.0"
+
 
 [profile.release]
 debug = true
@@ -31,6 +31,8 @@ debug = true
 [target.'cfg(not(target_arch = "spirv"))'.dependencies]
 vulkano = { version = "0.35.1" }
 dashmap = "6.1.0"
+rspirv = "0.12.0"
+spirv-tools = "0.10.0"
 
 [target.'cfg(target_arch = "spirv")'.dependencies]
 spirv-std = { version = "0.9" }

@@ -42,9 +42,10 @@ fn dtw_weights(len: usize, g: Precision) -> Vec<Precision> {
 fn test_device() {
     let (device, _, _, _, _) = crate::utils::get_device();
     println!(
-        "Physical device: {:?} type: {:?}",
+        "Physical device: {:?} \nmax threads per workgroup: {:?}, \nmax compute work group size: {:?}",
         device.physical_device().properties().device_name,
-        device.physical_device().properties().device_name
+        device.physical_device().properties().max_compute_work_group_size,
+        device.physical_device().properties().max_compute_work_group_invocations
     );
 }
 
@@ -201,19 +202,19 @@ pub fn test_twe() {
         stiffness,
         penalty,
     );
-
+    println!("GPU TWE time: {:?}", start_time.elapsed());
+    
     let sum = result
         .iter()
         .map(|v| v.iter().map(|x| *x as f64).sum::<f64>())
         .sum::<f64>();
     println!("SUM: {}", sum);
-
-    println!("GPU TWE time: {:?}", start_time.elapsed());
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
             assert_eq_with_tol!(result[i][j], twe_ts[i][j], 1e-6);
         }
     }
+    // println!("FINISHED");
 }
 
 // #[test]

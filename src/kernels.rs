@@ -166,9 +166,13 @@ macro_rules! warp_kernel_spec {
                                     kernel_constants
                                 )
                                 .unwrap();
-                            println!("THREAD COUNT: {}", threads_count);
 
-                            unsafe { builder.dispatch([threads_count, 1, 1]) }.unwrap();
+                            let max_threads_x = device
+                                .physical_device()
+                                .properties()
+                                .max_compute_work_group_size[0];
+
+                            unsafe { builder.dispatch([threads_count / max_threads_x, 1, 1]) }.unwrap();
                         }
                     }
                 }
@@ -321,7 +325,7 @@ macro_rules! warp_kernel_spec {
                 }
 
                 #[cfg(target_arch = "spirv")]
-                #[spirv(compute(threads(32)))]
+                #[spirv(compute(threads(1)))]
                 pub fn single_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
@@ -366,7 +370,7 @@ macro_rules! warp_kernel_spec {
                     );
                 }
                 #[cfg(target_arch = "spirv")]
-                #[spirv(compute(threads(32)))]
+                #[spirv(compute(threads(1)))]
                 pub fn batch_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
@@ -385,6 +389,12 @@ macro_rules! warp_kernel_spec {
 
                     let global_id = global_id.x as u64;
                     let threads_stride = constants.diamonds_count * constants.max_subgroup_threads;
+
+                    // diagonal[global_id as usize] = global_id as Precision;
+
+                    // if global_id != 4235467889 {
+                    //     return;
+                    // }
 
                     let pair_index = global_id / threads_stride;
                     let instance_id = global_id % threads_stride;
