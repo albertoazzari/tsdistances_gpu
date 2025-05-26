@@ -37,7 +37,6 @@ macro_rules! warp_kernel_spec {
         $(
             pub mod $name {
                 use crate::Precision;
-
                 #[cfg(not(target_arch = "spirv"))]
                 pub mod cpu {
                     use std::sync::Arc;
@@ -68,10 +67,9 @@ macro_rules! warp_kernel_spec {
                         fn build_kernel_params(
                             &self,
                             _allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
-                            _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_gpu(&self.$vec5, _builder, &_allocator))?
+                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator))?
                             }
                         }
 
@@ -390,12 +388,6 @@ macro_rules! warp_kernel_spec {
                     let global_id = global_id.x as u64;
                     let threads_stride = constants.diamonds_count * constants.max_subgroup_threads;
 
-                    // diagonal[global_id as usize] = global_id as Precision;
-
-                    // if global_id != 4235467889 {
-                    //     return;
-                    // }
-
                     let pair_index = global_id / threads_stride;
                     let instance_id = global_id % threads_stride;
 
@@ -461,7 +453,6 @@ pub mod kernel_trait {
         fn build_kernel_params(
             &self,
             allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
-            builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
         ) -> Self::KernelParams;
 
         fn dispatch(
@@ -493,31 +484,31 @@ pub fn msm_cost_function(x: Precision, y: Precision, z: Precision) -> Precision 
 }
 
 warp_kernel_spec! {
-    // fn erp_distance[ERPImpl](a[a_offset], b[b_offset], i, j, x, y, z, [gap_penalty: Precision], [], [], [], []) {
-    //     (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
-    //     .min((z + (a[a_offset + i as usize] - gap_penalty).abs()).min(x + (b[b_offset + j as usize] - gap_penalty).abs()))
-    // }
-    // fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: Precision], [], [], [], []) {
-    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
-    //     (dist <= epsilon) as i32 as Precision * (y + 1.0) + (dist > epsilon) as i32 as Precision * x.max(z)
-    // }
-    // fn dtw_distance[DTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
-    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
-    //     dist + z.min(x.min(y))
-    // }
-    // fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: Precision]) {
-    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2) * weights[(i as i32 - j as i32).abs() as usize];
-    //     dist + x.min(y.min(z))
-    // }
-    // fn msm_distance[MSMImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
-    //     (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
-    //     .min(
-    //         z + super::msm_cost_function(a[a_offset + i as usize], if i == 0 {0.0} else {a[a_offset + i as usize - 1]}, b[b_offset + j as usize]),
-    //     )
-    //     .min(
-    //         x + super::msm_cost_function(b[b_offset + j as usize], a[a_offset + i as usize], if j == 0 {0.0} else {b[b_offset + j as usize - 1]}),
-    //     )
-    // }
+    fn erp_distance[ERPImpl](a[a_offset], b[b_offset], i, j, x, y, z, [gap_penalty: Precision], [], [], [], []) {
+        (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
+        .min((z + (a[a_offset + i as usize] - gap_penalty).abs()).min(x + (b[b_offset + j as usize] - gap_penalty).abs()))
+    }
+    fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: Precision], [], [], [], []) {
+        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
+        (dist <= epsilon) as i32 as Precision * (y + 1.0) + (dist > epsilon) as i32 as Precision * x.max(z)
+    }
+    fn dtw_distance[DTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
+        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
+        dist + z.min(x.min(y))
+    }
+    fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: Precision]) {
+        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2) * weights[(i as i32 - j as i32).abs() as usize];
+        dist + x.min(y.min(z))
+    }
+    fn msm_distance[MSMImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
+        (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
+        .min(
+            z + super::msm_cost_function(a[a_offset + i as usize], if i == 0 {0.0} else {a[a_offset + i as usize - 1]}, b[b_offset + j as usize]),
+        )
+        .min(
+            x + super::msm_cost_function(b[b_offset + j as usize], a[a_offset + i as usize], if j == 0 {0.0} else {b[b_offset + j as usize - 1]}),
+        )
+    }
     fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: Precision], [penalty: Precision], [], [], []) {
         let delete_addition = penalty + stiffness;
         // deletion in a
@@ -540,8 +531,8 @@ warp_kernel_spec! {
 
         del_a.min(del_b.min(match_a_b))
     }
-    // fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: f32], [], [], [], []) {
-    //     let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
-    //             dist + (z + w).min((x + w).min(y))
-    // }
+    fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: f32], [], [], [], []) {
+        let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
+                dist + (z + w).min((x + w).min(y))
+    }
 }

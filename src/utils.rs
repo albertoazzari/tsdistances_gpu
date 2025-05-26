@@ -3,21 +3,16 @@ use std::{cell::OnceCell, sync::Arc};
 use vulkano::{
     buffer::{
         allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
-        Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer,
+        BufferContents, BufferUsage, Subbuffer,
     },
-    command_buffer::{
-        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CopyBufferInfo,
-        PrimaryAutoCommandBuffer,
-    },
+    command_buffer::allocator::StandardCommandBufferAllocator,
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{
         physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
         Queue, QueueCreateInfo, QueueFlags,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
-    memory::allocator::{
-        AllocationCreateInfo, MemoryAllocatePreference, MemoryTypeFilter, StandardMemoryAllocator,
-    },
+    memory::allocator::{MemoryTypeFilter, StandardMemoryAllocator},
     VulkanLibrary,
 };
 
@@ -80,6 +75,8 @@ pub fn get_device() -> (
         })
         .unwrap();
 
+    println!("Using {:?}", physical_device.properties().device_name);
+
     let (device, mut queues) = Device::new(
         physical_device,
         DeviceCreateInfo {
@@ -134,7 +131,6 @@ pub fn get_device() -> (
 
 pub fn move_gpu<T: BufferContents + Copy>(
     data: &[T],
-    builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
     subbuffer_allocator: &Arc<SubbufferAllocator>,
 ) -> Subbuffer<[T]> {
     let buffer = subbuffer_allocator
@@ -142,79 +138,4 @@ pub fn move_gpu<T: BufferContents + Copy>(
         .unwrap();
     buffer.write().unwrap().copy_from_slice(&data);
     buffer
-
-    //     let start_time = std::time::Instant::now();
-    //     // Create CPU-accessible source buffer
-    //     let buffer_host = Buffer::from_iter(
-    //         memory_allocator.clone(),
-    //         BufferCreateInfo {
-    //             usage: BufferUsage::TRANSFER_SRC,
-    //             ..Default::default()
-    //         },
-    //         AllocationCreateInfo {
-    //             memory_type_filter: MemoryTypeFilter::PREFER_HOST
-    //                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-    //             ..Default::default()
-    //         },
-    //         data.iter().cloned(),
-    //     )
-    //     .unwrap_or_else(|e| {
-    //         panic!(
-    //             "Failed to create host buffer of len {}\n {:?}",
-    //             data.len(),
-    //             e
-    //         );
-    //     });
-
-    //     println!("Buffer creation time: {:?}", start_time.elapsed());
-
-    //     // Create GPU-side destination buffer with TRANSFER_SRC for later readback
-    //     let buffer_device = Buffer::new_slice(
-    //         memory_allocator.clone(),
-    //         BufferCreateInfo {
-    //             usage: BufferUsage::TRANSFER_DST
-    //                 | BufferUsage::STORAGE_BUFFER
-    //                 | BufferUsage::TRANSFER_SRC,
-    //             ..Default::default()
-    //         },
-    //         AllocationCreateInfo {
-    //             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-    //             allocate_preference: MemoryAllocatePreference::AlwaysAllocate,
-    //             ..Default::default()
-    //         },
-    //         data.len() as u64,
-    //     )
-    //     .unwrap_or_else(|e| {
-    //         panic!(
-    //             "Failed to create device buffer of len {}\n {:?}",
-    //             data.len(),
-    //             e
-    //         );
-    //     });
-
-    //     println!("Buffer creation time: {:?}", start_time.elapsed());
-
-    //     builder
-    //         .copy_buffer(CopyBufferInfo::buffers(buffer_host, buffer_device.clone()))
-    //         .unwrap();
-
-    //     println!(
-    //         "Buffer copy time: {:?}, len: {}",
-    //         start_time.elapsed(),
-    //         data.len()
-    //     );
 }
-
-// ELAPSED PART 1: 11.690217ms
-// Buffer creation time: 59.694514ms
-// Buffer creation time: 59.787637ms
-// Buffer copy time: 59.792759ms, len: 33600
-// ELAPSED PART 2: 71.490509ms
-// Buffer creation time: 20.088µs
-// Buffer creation time: 69.78µs
-// Buffer copy time: 73.161µs, len: 33600
-// ELAPSED PART 3: 71.566189ms
-// Buffer creation time: 15.622723ms
-// Buffer creation time: 15.745119ms
-// Buffer copy time: 15.749718ms, len: 11520000
-// ELAPSED PART 4: 87.318631ms

@@ -263,15 +263,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     )
     .unwrap();
 
-    // println!("ELAPSED PART 1: {:?}", start_time.elapsed());
-    let a_gpu = move_gpu(&a, &mut builder, &buffer_allocator);
-    // println!("ELAPSED PART 2: {:?}", start_time.elapsed());
-    let b_gpu = move_gpu(&b, &mut builder, &buffer_allocator);
-    // println!("ELAPSED PART 3: {:?}", start_time.elapsed());
-    let mut diagonal = move_gpu(&diagonal, &mut builder, &buffer_allocator);
-    // println!("ELAPSED PART 4: {:?}", start_time.elapsed());
-    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), &mut builder);
-    // println!("ELAPSED PART 5: {:?}", start_time.elapsed());
+            let a_gpu = move_gpu(&a, &buffer_allocator);
+            let b_gpu = move_gpu(&b, &buffer_allocator);
+            let mut diagonal = move_gpu(&diagonal, &buffer_allocator);
+            let kernel_params = params.build_kernel_params(buffer_allocator.clone());
 
     // Number of kernel calls
     for i in 0..rows_count {
@@ -321,8 +316,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
 
-    // let diagonal = move_cpu(diagonal, &mut builder, &buffer_allocator);
-
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
@@ -330,13 +323,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         .then_signal_fence_and_flush()
         .unwrap();
     future.wait(None).unwrap();
-    // println!("FINISHED GPU EXEC: {:?}", start_time.elapsed());
     let mut res = M::new_return(a_count, b_count);
-    // println!("PREPARE RESULT: {:?}", start_time.elapsed());
     let diagonal = diagonal.read().unwrap();
-    // println!("READ DIAGONAL: {:?}", start_time.elapsed());
-    // let diagonal = move_cpu(diagonal);
-    // println!("GET DIAGONAL: {:?}", start_time.elapsed());
 
     for i in 0..a_count {
         for j in 0..b_count {

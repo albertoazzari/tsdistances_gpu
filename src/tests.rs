@@ -49,139 +49,139 @@ fn test_device() {
     );
 }
 
-// #[test]
-// pub fn test_erp() {
-//     let (device, queue, sba, sda, ma) = crate::utils::get_device();
+#[test]
+pub fn test_erp() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
-//     let ts = read_csv("tests/data/ts.csv").unwrap();
-//     let erp_ts: Vec<Vec<f32>> = read_csv("tests/results/erp.csv").unwrap();
+    let ts = read_csv("tests/data/ts.csv").unwrap();
+    let erp_ts: Vec<Vec<f32>> = read_csv("tests/results/erp.csv").unwrap();
 
-//     let gap_penalty = 1.0;
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::erp::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         ma.clone(),
-//         &ts,
-//         &ts,
-//         gap_penalty,
-//     );
+    let gap_penalty = 1.0;
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::erp::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        ma.clone(),
+        &ts,
+        &ts,
+        gap_penalty,
+    );
 
-//     println!("GPU ERP time: {:?}", start_time.elapsed());
-//     for i in 0..ts.len() - 1 {
-//         for j in i + 1..ts.len() {
-//             assert_eq_with_tol!(result[i][j], erp_ts[i][j], 1e-6);
-//         }
-//     }
-// }
+    println!("GPU ERP time: {:?}", start_time.elapsed());
+    for i in 0..ts.len() - 1 {
+        for j in i + 1..ts.len() {
+            assert_eq_with_tol!(result[i][j], erp_ts[i][j], 1e-6);
+        }
+    }
+}
 
-// #[test]
-// pub fn test_lcss() {
-//     let (device, queue, sba, sda, ma) = crate::utils::get_device();
+#[test]
+pub fn test_lcss() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
-//     let data = read_csv("tests/data/ts.csv").unwrap();
-//     let lcss_ts: Vec<Vec<f32>> = read_csv("tests/results/lcss.csv").unwrap();
-//     let epsilon = 1.0;
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::lcss::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         ma.clone(),
-//         &data,
-//         &data,
-//         epsilon,
-//     );
-//     println!("GPU LCSS time: {:?}", start_time.elapsed());
-//     for i in 0..data.len() - 1 {
-//         for j in i + 1..data.len() {
-//             assert_eq_with_tol!(result[i][j], lcss_ts[i][j], 1e-6);
-//         }
-//     }
-// }
+    let data = read_csv("tests/data/ts.csv").unwrap();
+    let lcss_ts: Vec<Vec<f32>> = read_csv("tests/results/lcss.csv").unwrap();
+    let epsilon = 1.0;
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::lcss::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        ma.clone(),
+        &data,
+        &data,
+        epsilon,
+    );
+    println!("GPU LCSS time: {:?}", start_time.elapsed());
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], lcss_ts[i][j], 1e-6);
+        }
+    }
+}
 
-// #[test]
-// pub fn test_dtw() {
-//     let (device, queue, sba, sda, ma) = crate::utils::get_device();
+#[test]
+pub fn test_dtw() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
-//     let data = read_csv("tests/data/ts.csv").unwrap();
-//     let dtw_ts: Vec<Vec<f32>> = read_csv("tests/results/dtw.csv").unwrap();
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::dtw::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         ma.clone(),
-//         &data,
-//         &data,
-//     );
-//     println!("GPU DTW time: {:?}", start_time.elapsed());
-//     for i in 0..data.len() - 1 {
-//         for j in i + 1..data.len() {
-//             assert_eq_with_tol!(result[i][j], dtw_ts[i][j], 1e-6);
-//         }
-//     }
-// }
+    let data = read_csv("tests/data/ts.csv").unwrap();
+    let dtw_ts: Vec<Vec<f32>> = read_csv("tests/results/dtw.csv").unwrap();
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::dtw::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        ma.clone(),
+        &data,
+        &data,
+    );
+    println!("GPU DTW time: {:?}", start_time.elapsed());
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], dtw_ts[i][j], 1e-6);
+        }
+    }
+}
 
-// #[test]
-// pub fn test_wdtw() {
-//     let (device, queue, sba, sda, ma) = crate::utils::get_device();
+#[test]
+pub fn test_wdtw() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
-//     let g = 0.05;
-//     let data = read_csv("tests/data/ts.csv").unwrap();
-//     let wdtw_ts: Vec<Vec<f32>> = read_csv("tests/results/wdtw.csv").unwrap();
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::wdtw::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         ma.clone(),
-//         &data,
-//         &data,
-//         &dtw_weights(data[0].len(), g),
-//     );
-//     println!("GPU WDTW time: {:?}", start_time.elapsed());
-//     for i in 0..data.len() - 1 {
-//         for j in i + 1..data.len() {
-//             assert_eq_with_tol!(result[i][j], wdtw_ts[i][j], 1e-6);
-//         }
-//     }
-// }
+    let g = 0.05;
+    let data = read_csv("tests/data/ts.csv").unwrap();
+    let wdtw_ts: Vec<Vec<f32>> = read_csv("tests/results/wdtw.csv").unwrap();
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::wdtw::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        ma.clone(),
+        &data,
+        &data,
+        &dtw_weights(data[0].len(), g),
+    );
+    println!("GPU WDTW time: {:?}", start_time.elapsed());
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], wdtw_ts[i][j], 1e-6);
+        }
+    }
+}
 
-// #[test]
-// pub fn test_msm() {
-//     let (device, queue, sba, sda, ma) = crate::utils::get_device();
+#[test]
+pub fn test_msm() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
-//     let data = read_csv("tests/data/ts.csv").unwrap();
-//     let msm_ts: Vec<Vec<f32>> = read_csv("tests/results/msm.csv").unwrap();
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::msm::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         ma.clone(),
-//         &data,
-//         &data,
-//     );
-//     println!("GPU MSM time: {:?}", start_time.elapsed());
-//     for i in 0..data.len() - 1 {
-//         for j in i + 1..data.len() {
-//             assert_eq_with_tol!(result[i][j], msm_ts[i][j], 1e-6);
-//             if (msm_ts[i][j] - 2141.099853515625).abs() < 1e-6 {
-//                 println!(
-//                     "MSM result is not correct: {} vs {}",
-//                     result[i][j], msm_ts[i][j]
-//                 );
-//             }
-//         }
-//     }
-// }
+    let data = read_csv("tests/data/ts.csv").unwrap();
+    let msm_ts: Vec<Vec<f32>> = read_csv("tests/results/msm.csv").unwrap();
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::msm::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        ma.clone(),
+        &data,
+        &data,
+    );
+    println!("GPU MSM time: {:?}", start_time.elapsed());
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], msm_ts[i][j], 1e-6);
+            if (msm_ts[i][j] - 2141.099853515625).abs() < 1e-6 {
+                println!(
+                    "MSM result is not correct: {} vs {}",
+                    result[i][j], msm_ts[i][j]
+                );
+            }
+        }
+    }
+}
 
 #[test]
 pub fn test_twe() {
@@ -189,7 +189,7 @@ pub fn test_twe() {
     let penalty = 1.0;
     let data: Vec<Vec<f32>> = read_csv("tests/data/ts.csv").unwrap();
     let twe_ts: Vec<Vec<f32>> = read_csv("tests/results/twe.csv").unwrap();
-    let runs = 2;
+    let runs = 1;
     let mut avg_time = 0.0;
 
     for _ in 0..runs {
@@ -222,22 +222,28 @@ pub fn test_twe() {
     println!("GPU TWE time: {:?}", avg_time / runs as f64);
 }
 
-// #[test]
-// pub fn test_adtw() {
-//     let (device, queue, sba, sda, ma) = crate::utils::get_device();
-//     let warp_penalty = 0.1;
-//     let data = read_csv("tests/data/ts.csv").unwrap();
-//     let adtw_ts: Vec<Vec<f32>> = read_csv("tests/results/adtw.csv").unwrap();
-//     let start_time = std::time::Instant::now();
-//     let result = crate::cpu::adtw::<MultiBatchMode>(
-//         device.clone(),
-//         queue.clone(),
-//         sba.clone(),
-//         sda.clone(),
-//         ma.clone(),
-//         &data,
-//         &data,
-//         warp_penalty,
-//     );
-//     println!("GPU ADTW time: {:?}", start_time.elapsed());
-// }
+#[test]
+pub fn test_adtw() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let warp_penalty = 0.1;
+    let data = read_csv("tests/data/ts.csv").unwrap();
+    let adtw_ts: Vec<Vec<f32>> = read_csv("tests/results/adtw.csv").unwrap();
+    let start_time = std::time::Instant::now();
+    let result = crate::cpu::adtw::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        ma.clone(),
+        &data,
+        &data,
+        warp_penalty,
+    );
+    println!("GPU ADTW time: {:?}", start_time.elapsed());
+
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], adtw_ts[i][j], 1e-6);
+        }
+    }
+}
