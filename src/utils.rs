@@ -5,8 +5,8 @@ use vulkano::{
         allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
         BufferContents, BufferUsage, Subbuffer,
     },
-    command_buffer::allocator::StandardCommandBufferAllocator,
-    descriptor_set::allocator::StandardDescriptorSetAllocator,
+    command_buffer::{self, allocator::StandardCommandBufferAllocator},
+    descriptor_set::{self, allocator::StandardDescriptorSetAllocator},
     device::{
         physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
         Queue, QueueCreateInfo, QueueFlags,
@@ -38,8 +38,8 @@ pub fn get_device() -> (
     Arc<StandardDescriptorSetAllocator>,
     Arc<SubbufferAllocator>,
 ) {
-    let cell = OnceCell::new();
-    let instance = cell.get_or_init(|| {
+    let instance_cell = OnceCell::new();
+    let instance = instance_cell.get_or_init(|| {
         let library = VulkanLibrary::new().unwrap();
         Instance::new(
             library,
@@ -51,81 +51,89 @@ pub fn get_device() -> (
         .unwrap()
     });
     let device_extensions = DeviceExtensions {
-        khr_storage_buffer_storage_class: true,
         ..DeviceExtensions::empty()
     };
 
-    let (physical_device, queue_family_index) = instance
-        .enumerate_physical_devices()
-        .unwrap()
-        .filter(|p| p.supported_extensions().contains(&device_extensions))
-        .filter_map(|p| {
-            p.queue_family_properties()
-                .iter()
-                .position(|q| q.queue_flags.intersects(QueueFlags::COMPUTE))
-                .map(|i| (p, i as u32))
-        })
-        .min_by_key(|(p, _)| match p.properties().device_type {
-            PhysicalDeviceType::DiscreteGpu => 0,
-            PhysicalDeviceType::IntegratedGpu => 1,
-            PhysicalDeviceType::VirtualGpu => 2,
-            PhysicalDeviceType::Cpu => 3,
-            PhysicalDeviceType::Other => 4,
-            _ => 5,
-        })
-        .unwrap();
-
-    println!("Using {:?}", physical_device.properties().device_name);
-
-    let (device, mut queues) = Device::new(
-        physical_device,
-        DeviceCreateInfo {
-            enabled_extensions: device_extensions,
-            enabled_features: {
-                let mut features = DeviceFeatures::default();
-                features.vulkan_memory_model = true;
-                features.shader_int64 = true;
-                features.shader_int8 = true;
-                features
-            },
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index,
+    let device_cell: OnceCell<(Arc<Device>, Arc<Queue>)> = OnceCell::new();
+    let (device, queue) = device_cell.get_or_init(|| {
+        let (physical_device, queue_family_index) = instance
+            .enumerate_physical_devices()
+            .unwrap()
+            .filter(|p| p.supported_extensions().contains(&device_extensions))
+            .filter_map(|p| {
+                p.queue_family_properties()
+                    .iter()
+                    .position(|q| q.queue_flags.intersects(QueueFlags::COMPUTE))
+                    .map(|i| (p, i as u32))
+            })
+            .min_by_key(|(p, _)| match p.properties().device_type {
+                PhysicalDeviceType::DiscreteGpu => 0,
+                PhysicalDeviceType::IntegratedGpu => 1,
+                PhysicalDeviceType::VirtualGpu => 2,
+                PhysicalDeviceType::Cpu => 3,
+                PhysicalDeviceType::Other => 4,
+                _ => 5,
+            })
+            .unwrap();
+        let (device, mut queues) = Device::new(
+            physical_device.clone(),
+            DeviceCreateInfo {
+                enabled_extensions: device_extensions,
+                enabled_features: {
+                    let mut features = DeviceFeatures::default();
+                    features.vulkan_memory_model = true;
+                    features.shader_int8 = true;
+                    features.shader_int64 = true;
+                    features.shader_float64 = true;
+                    features
+                },
+                queue_create_infos: vec![QueueCreateInfo {
+                    queue_family_index,
+                    ..Default::default()
+                }],
                 ..Default::default()
-            }],
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    let queue = queues.next().unwrap();
+            },
+        )
+        .unwrap();
+        (device, queues.next().unwrap())
+    });
 
-    let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
-        device.clone(),
-        Default::default(),
-    ));
+    let allocator = OnceCell::new();
+    let (command_buffer, descriptor_set, buffer) = allocator.get_or_init(|| {
+        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
+            device.clone(),
+            Default::default(),
+        ));
+        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+            device.clone(),
+            Default::default(),
+        ));
 
-    let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
-        device.clone(),
-        Default::default(),
-    ));
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let buffer_allocator = Arc::new(SubbufferAllocator::new(
+            memory_allocator.clone(),
+            SubbufferAllocatorCreateInfo {
+                buffer_usage: BufferUsage::TRANSFER_DST
+                    | BufferUsage::STORAGE_BUFFER
+                    | BufferUsage::TRANSFER_SRC,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+        ));
+        (
+            command_buffer_allocator.clone(),
+            descriptor_set_allocator.clone(),
+            buffer_allocator.clone(),
+        )
+    });
 
-    let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-    let buffer_allocator = Arc::new(SubbufferAllocator::new(
-        memory_allocator.clone(),
-        SubbufferAllocatorCreateInfo {
-            buffer_usage: BufferUsage::TRANSFER_DST
-                | BufferUsage::STORAGE_BUFFER
-                | BufferUsage::TRANSFER_SRC,
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-    ));
     (
-        device,
-        queue,
-        command_buffer_allocator,
-        descriptor_set_allocator,
-        buffer_allocator,
+        device.clone(),
+        queue.clone(),
+        command_buffer.clone(),
+        descriptor_set.clone(),
+        buffer.clone(),
     )
 }
 

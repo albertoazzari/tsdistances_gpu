@@ -108,8 +108,8 @@ macro_rules! warp_kernel_spec {
                                 None => {
                                     (
                                         concat!("kernels::", stringify!($name), "::single_call"),
-                                        0,
-                                        0,
+                                        0u64,
+                                        0u64,
                                         (diamonds_count * max_subgroup_threads) as u32
                                     )
                                 },
@@ -170,7 +170,7 @@ macro_rules! warp_kernel_spec {
                                 .properties()
                                 .max_compute_work_group_size[0];
 
-                            unsafe { builder.dispatch([threads_count / max_threads_x, 1, 1]) }.unwrap();
+                            unsafe { builder.dispatch([threads_count / max_threads_x, 1u32, 1u32]) }.unwrap();
                         }
                     }
                 }
@@ -281,7 +281,7 @@ macro_rules! warp_kernel_spec {
                     $($param4: $ty4,)?
                     $($vec5: &[$ty5],)?
                 ) {
-                    let warp_id = global_id % max_subgroup_threads;
+                    let warp_id: u64 = global_id % max_subgroup_threads;
                     let diamond_id = global_id / max_subgroup_threads;
 
                     if diamond_id >= diamonds_count {
@@ -531,7 +531,7 @@ warp_kernel_spec! {
 
         del_a.min(del_b.min(match_a_b))
     }
-    fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: f32], [], [], [], []) {
+    fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: Precision], [], [], [], []) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
                 dist + (z + w).min((x + w).min(y))
     }

@@ -31,9 +31,9 @@ const WEIGHT_MAX: Precision = 1.0;
 fn dtw_weights(len: usize, g: Precision) -> Vec<Precision> {
     let mut weights = vec![0.0; len];
     let half_len = len as Precision / 2.0;
+    let e = std::f64::consts::E as Precision;
     for i in 0..len {
-        weights[i] = WEIGHT_MAX
-            / (1.0 + std::f32::consts::E.powf(-g * (i as Precision - half_len as Precision)));
+        weights[i] = WEIGHT_MAX / (1.0 + e.powf(-g * (i as Precision - half_len)));
     }
     weights
 }
@@ -54,7 +54,7 @@ pub fn test_erp() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
     let ts = read_csv("tests/data/ts.csv").unwrap();
-    let erp_ts: Vec<Vec<f32>> = read_csv("tests/results/erp.csv").unwrap();
+    let erp_ts: Vec<Vec<Precision>> = read_csv("tests/results/erp.csv").unwrap();
 
     let gap_penalty = 1.0;
     let start_time = std::time::Instant::now();
@@ -82,7 +82,7 @@ pub fn test_lcss() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let lcss_ts: Vec<Vec<f32>> = read_csv("tests/results/lcss.csv").unwrap();
+    let lcss_ts: Vec<Vec<Precision>> = read_csv("tests/results/lcss.csv").unwrap();
     let epsilon = 1.0;
     let start_time = std::time::Instant::now();
     let result = crate::cpu::lcss::<MultiBatchMode>(
@@ -108,7 +108,7 @@ pub fn test_dtw() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let dtw_ts: Vec<Vec<f32>> = read_csv("tests/results/dtw.csv").unwrap();
+    let dtw_ts: Vec<Vec<Precision>> = read_csv("tests/results/dtw.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::dtw::<MultiBatchMode>(
         device.clone(),
@@ -133,7 +133,7 @@ pub fn test_wdtw() {
 
     let g = 0.05;
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let wdtw_ts: Vec<Vec<f32>> = read_csv("tests/results/wdtw.csv").unwrap();
+    let wdtw_ts: Vec<Vec<Precision>> = read_csv("tests/results/wdtw.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::wdtw::<MultiBatchMode>(
         device.clone(),
@@ -158,7 +158,7 @@ pub fn test_msm() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let msm_ts: Vec<Vec<f32>> = read_csv("tests/results/msm.csv").unwrap();
+    let msm_ts: Vec<Vec<Precision>> = read_csv("tests/results/msm.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::msm::<MultiBatchMode>(
         device.clone(),
@@ -173,12 +173,6 @@ pub fn test_msm() {
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
             assert_eq_with_tol!(result[i][j], msm_ts[i][j], 1e-6);
-            if (msm_ts[i][j] - 2141.099853515625).abs() < 1e-6 {
-                println!(
-                    "MSM result is not correct: {} vs {}",
-                    result[i][j], msm_ts[i][j]
-                );
-            }
         }
     }
 }
@@ -187,9 +181,9 @@ pub fn test_msm() {
 pub fn test_twe() {
     let stiffness = 0.001;
     let penalty = 1.0;
-    let data: Vec<Vec<f32>> = read_csv("tests/data/ts.csv").unwrap();
-    let twe_ts: Vec<Vec<f32>> = read_csv("tests/results/twe.csv").unwrap();
-    let runs = 1;
+    let data: Vec<Vec<Precision>> = read_csv("tests/data/ts.csv").unwrap();
+    let twe_ts: Vec<Vec<Precision>> = read_csv("tests/results/twe.csv").unwrap();
+    let runs = 2;
     let mut avg_time = 0.0;
 
     for _ in 0..runs {
@@ -212,14 +206,18 @@ pub fn test_twe() {
             .iter()
             .map(|v| v.iter().map(|x| *x as f64).sum::<f64>())
             .sum::<f64>();
-        println!("SUM: {}", sum);
+        let sum_ts = twe_ts
+            .iter()
+            .map(|v| v.iter().map(|x| *x as f64).sum::<f64>())
+            .sum::<f64>();
+        println!("SUM (NEW): {}, SUM (OLD): {}", sum, sum_ts);
         for i in 0..data.len() - 1 {
             for j in i + 1..data.len() {
                 assert_eq_with_tol!(result[i][j], twe_ts[i][j], 1e-6);
             }
         }
     }
-    println!("GPU TWE time: {:?}", avg_time / runs as f64);
+    println!("GPU TWE time: {:?}s", avg_time / runs as f64);
 }
 
 #[test]
@@ -227,7 +225,7 @@ pub fn test_adtw() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
     let warp_penalty = 0.1;
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let adtw_ts: Vec<Vec<f32>> = read_csv("tests/results/adtw.csv").unwrap();
+    let adtw_ts: Vec<Vec<Precision>> = read_csv("tests/results/adtw.csv").unwrap();
     let start_time = std::time::Instant::now();
     let result = crate::cpu::adtw::<MultiBatchMode>(
         device.clone(),

@@ -18,11 +18,10 @@ mod warps;
 mod cpu {
     use crate::kernels::adtw_distance::cpu::ADTWImpl;
     use crate::kernels::dtw_distance::cpu::DTWImpl;
-    use crate::kernels::msm_distance::cpu::MSMImpl;
-    use crate::kernels::twe_distance::cpu::TWEImpl;
-    // use crate::kernels::wdtw_distance::cpu::WDTWImpl;
     use crate::kernels::erp_distance::cpu::ERPImpl;
     use crate::kernels::lcss_distance::cpu::LCSSImpl;
+    use crate::kernels::msm_distance::cpu::MSMImpl;
+    use crate::kernels::twe_distance::cpu::TWEImpl;
     use crate::kernels::wdtw_distance::cpu::WDTWImpl;
     use crate::warps::diamond_partitioning_gpu;
     use crate::warps::GpuBatchMode;
@@ -31,7 +30,6 @@ mod cpu {
 
     use vulkano::buffer::allocator::SubbufferAllocator;
     use vulkano::device::Queue;
-    use vulkano::memory::allocator::StandardMemoryAllocator;
     use vulkano::{
         command_buffer::allocator::StandardCommandBufferAllocator,
         descriptor_set::allocator::StandardDescriptorSetAllocator, device::Device,

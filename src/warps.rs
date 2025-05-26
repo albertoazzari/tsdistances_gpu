@@ -263,10 +263,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     )
     .unwrap();
 
-            let a_gpu = move_gpu(&a, &buffer_allocator);
-            let b_gpu = move_gpu(&b, &buffer_allocator);
-            let mut diagonal = move_gpu(&diagonal, &buffer_allocator);
-            let kernel_params = params.build_kernel_params(buffer_allocator.clone());
+    let a_gpu = move_gpu(&a, &buffer_allocator);
+    let b_gpu = move_gpu(&b, &buffer_allocator);
+    let mut diagonal = move_gpu(&diagonal, &buffer_allocator);
+    let kernel_params = params.build_kernel_params(buffer_allocator.clone());
 
     // Number of kernel calls
     for i in 0..rows_count {

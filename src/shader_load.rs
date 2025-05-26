@@ -1,4 +1,7 @@
-use std::sync::{Arc, OnceLock};
+use std::{
+    fs,
+    sync::{Arc, OnceLock},
+};
 
 use dashmap::DashMap;
 use vulkano::{
@@ -20,7 +23,11 @@ use rspirv::binary::Assemble;
 use rspirv::spirv::{ExecutionMode, Op};
 use spirv_tools::{opt::Optimizer, val::Validator, TargetEnv};
 
-fn load(device: Arc<Device>, shader: &[u8]) -> Result<Arc<ShaderModule>, Validated<VulkanError>> {
+fn load(
+    entry_point: &str,
+    device: Arc<Device>,
+    shader: &[u8],
+) -> Result<Arc<ShaderModule>, Validated<VulkanError>> {
     // Load the SPIR-V module
     let mut spirv_module = rspirv::dr::load_bytes(shader).expect("Failed to load SPIR-V module");
     // Query the max threads in the x-dimension
@@ -29,8 +36,14 @@ fn load(device: Arc<Device>, shader: &[u8]) -> Result<Arc<ShaderModule>, Validat
         .properties()
         .max_compute_work_group_size[0];
 
-    // Find the entry point ID (assumes one entry point)
-    let entry_point_id = spirv_module.entry_points[0].operands[1].unwrap_id_ref(); // Operand[1] is the function ID
+    // Find the entry point ID for the given entry point name
+    let entry_point_id = spirv_module
+        .entry_points
+        .iter()
+        .find(|entry| entry.operands[2].unwrap_literal_string() == entry_point) // Replace "main" with the desired entry point name
+        .expect("Entry point not found")
+        .operands[1]
+        .unwrap_id_ref(); // Operand[1] is the function ID
 
     // Remove existing LocalSize if needed
     spirv_module.execution_modes.retain(|inst| {
@@ -74,7 +87,8 @@ fn load(device: Arc<Device>, shader: &[u8]) -> Result<Arc<ShaderModule>, Validat
 }
 
 pub fn get_shader_entry_pipeline(device: Arc<Device>, name: &'static str) -> Arc<ComputePipeline> {
-    let shader_module = SHADER_MODULE.get_or_init(|| load(device.clone(), SHADER_CODE).unwrap());
+    let shader_module =
+        SHADER_MODULE.get_or_init(|| load(name, device.clone(), SHADER_CODE).unwrap());
     let pipelines = SHADE_PIPELINES.get_or_init(Default::default);
 
     match pipelines.entry(name) {

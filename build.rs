@@ -9,9 +9,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     SpirvBuilder::new(".", "spirv-unknown-vulkan1.2")
         .print_metadata(MetadataPrintout::Full)
         .spirv_metadata(SpirvMetadata::NameVariables)
-        .capability(Capability::Int64)
+        .capability(Capability::VulkanMemoryModel)
         .capability(Capability::Int8)
-        .capability(Capability::GroupNonUniform)
+        .capability(Capability::Int64)
+        .capability(Capability::Float64)
         .build()?;
 
     Ok(())
