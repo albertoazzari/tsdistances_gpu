@@ -12,7 +12,6 @@ use vulkano::{
     },
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{Device, Queue},
-    memory::allocator::StandardMemoryAllocator,
     sync::GpuFuture,
 };
 
@@ -232,7 +231,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     init_val: Precision,
     is_batch: bool,
 ) -> M::ReturnType {
-    let start_time = std::time::Instant::now();
     let padded_a_len = M::get_padded_len(a_sample_len, max_subgroup_threads);
     let padded_b_len = M::get_padded_len(b_sample_len, max_subgroup_threads);
 

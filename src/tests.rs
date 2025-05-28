@@ -181,7 +181,7 @@ pub fn test_msm() {
 pub fn test_twe() {
     let stiffness = 0.001;
     let penalty = 1.0;
-    let data: Vec<Vec<Precision>> = read_csv("tests/data/ts.csv").unwrap();
+    let data = read_csv("tests/data/ts.csv").unwrap();
     let twe_ts: Vec<Vec<Precision>> = read_csv("tests/results/twe.csv").unwrap();
     let runs = 2;
     let mut avg_time = 0.0;
