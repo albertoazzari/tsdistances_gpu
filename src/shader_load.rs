@@ -11,14 +11,13 @@ use vulkano::{
     Validated, VulkanError,
 };
 
-static SHADER_MODULE: OnceLock<Arc<ShaderModule>> = OnceLock::new();
+static SHADER_MODULE: OnceLock<DashMap<String, Arc<ShaderModule>>> = OnceLock::new();
 static SHADE_PIPELINES: OnceLock<DashMap<&'static str, Arc<ComputePipeline>>> = OnceLock::new();
 
 const SHADER_CODE: &[u8] = include_bytes!(env!("tsdistances.spv"));
 
 use rspirv::binary::Assemble;
 use rspirv::spirv::{ExecutionMode, Op};
-use spirv_tools::{opt::Optimizer, val::Validator, TargetEnv};
 
 fn load(
     entry_point: &str,
@@ -65,27 +64,18 @@ fn load(
             ],
         ));
 
-    let target_env = TargetEnv::Vulkan_1_2;
-    let validator = spirv_tools::val::create(Some(target_env));
-    let mut optimizer = spirv_tools::opt::create(Some(target_env));
-    optimizer.register_performance_passes();
-
-    // Optimize the SPIR-V
     let spirv = spirv_module.assemble();
-    let optimized = optimizer
-        .optimize(spirv, &mut |_| (), None)
-        .expect("Failed to optimize SPIR-V");
-    validator
-        .validate(&optimized, None)
-        .expect("Failed to validate SPIR-V");
 
     // Create the ShaderModule with the optimized SPIR-V
-    unsafe { ShaderModule::new(device, ShaderModuleCreateInfo::new(&optimized.as_words())) }
+    unsafe { ShaderModule::new(device, ShaderModuleCreateInfo::new(&spirv)) }
 }
 
 pub fn get_shader_entry_pipeline(device: Arc<Device>, name: &'static str) -> Arc<ComputePipeline> {
-    let shader_module =
-        SHADER_MODULE.get_or_init(|| load(name, device.clone(), SHADER_CODE).unwrap());
+    let shader_modules = SHADER_MODULE.get_or_init(Default::default);
+    let shader_module = shader_modules
+        .entry(name.to_string())
+        .or_insert_with(|| load(name, device.clone(), SHADER_CODE).unwrap());
+
     let pipelines = SHADE_PIPELINES.get_or_init(Default::default);
 
     match pipelines.entry(name) {
