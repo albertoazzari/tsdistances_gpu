@@ -11,7 +11,6 @@ use vulkano::{
     Validated, VulkanError,
 };
 
-static SHADER_MODULE: OnceLock<DashMap<String, Arc<ShaderModule>>> = OnceLock::new();
 static SHADE_PIPELINES: OnceLock<DashMap<&'static str, Arc<ComputePipeline>>> = OnceLock::new();
 
 const SHADER_CODE: &[u8] = include_bytes!(env!("tsdistances.spv"));
@@ -71,16 +70,12 @@ fn load(
 }
 
 pub fn get_shader_entry_pipeline(device: Arc<Device>, name: &'static str) -> Arc<ComputePipeline> {
-    let shader_modules = SHADER_MODULE.get_or_init(Default::default);
-    let shader_module = shader_modules
-        .entry(name.to_string())
-        .or_insert_with(|| load(name, device.clone(), SHADER_CODE).unwrap());
-
     let pipelines = SHADE_PIPELINES.get_or_init(Default::default);
 
     match pipelines.entry(name) {
         dashmap::Entry::Occupied(entry) => entry.get().clone(),
         dashmap::Entry::Vacant(vacant_entry) => {
+            let shader_module = load(name, device.clone(), SHADER_CODE).unwrap();
             let Some(entry_point) = shader_module.entry_point(name) else {
                 panic!("Entry point {} not found in shader module", name);
             };
