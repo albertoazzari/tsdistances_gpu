@@ -40,6 +40,7 @@ type CachedCore = (
 );
 
 static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
+    let start_time = std::time::Instant::now();
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
         library,
@@ -49,6 +50,7 @@ static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
         },
     )
     .unwrap();
+    println!("instance: {:?}", start_time.elapsed());
 
     let device_extensions = DeviceExtensions::empty();
 
@@ -71,7 +73,10 @@ static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
             _ => 5,
         })
         .unwrap();
-
+    println!(
+        "physical device: {:?}",
+        start_time.elapsed()
+    );
     let (device, mut queues) = Device::new(
         physical_device,
         DeviceCreateInfo {
@@ -92,17 +97,19 @@ static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
         },
     )
     .unwrap();
-
+    println!("device: {:?}", start_time.elapsed());
     let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
         device.clone(),
         Default::default(),
     ));
+    println!("command buffer allocator: {:?}", start_time.elapsed());
     let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
         device.clone(),
         Default::default(),
     ));
+    println!("descriptor set allocator: {:?}", start_time.elapsed());
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-
+    println!("memory allocator: {:?}", start_time.elapsed());
     (
         device,
         queues.next().unwrap(),
@@ -119,6 +126,7 @@ pub fn get_device() -> (
     Arc<StandardDescriptorSetAllocator>,
     Arc<SubbufferAllocator>,
 ) {
+    let start_time = std::time::Instant::now();
     let (device, queue, command_buffer_allocator, descriptor_set_allocator, memory_allocator) =
         DEVICE_CORE.clone();
 
@@ -134,7 +142,7 @@ pub fn get_device() -> (
             ..Default::default()
         },
     ));
-
+    println!("get_device: {:?}", start_time.elapsed());
     (
         device,
         queue,

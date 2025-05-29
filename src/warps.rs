@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
     utils::move_gpu,
-    Precision,
+    Float,
 };
 use vulkano::{
     buffer::allocator::SubbufferAllocator,
@@ -23,8 +23,8 @@ pub trait GpuBatchMode {
 
     fn get_samples_count(input: &Self::InputType<'_>) -> usize;
     fn new_return(alen: usize, blen: usize) -> Self::ReturnType;
-    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Precision);
-    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Precision>;
+    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Float);
+    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Float>;
     fn get_sample_length(input: &Self::InputType<'_>) -> usize;
     fn get_padded_len(sample_length: usize, pad_stride: usize) -> usize {
         next_multiple_of_n(sample_length, pad_stride)
@@ -34,7 +34,7 @@ pub trait GpuBatchMode {
         start: usize,
         len: usize,
     ) -> Self::InputType<'a>;
-    fn apply_fn(ret: Self::ReturnType, func: impl Fn(Precision) -> Precision) -> Self::ReturnType;
+    fn apply_fn(ret: Self::ReturnType, func: impl Fn(Float) -> Float) -> Self::ReturnType;
     fn join_results(results: Vec<Self::ReturnType>) -> Self::ReturnType;
 }
 
@@ -42,8 +42,8 @@ pub struct SingleBatchMode;
 impl GpuBatchMode for SingleBatchMode {
     const IS_BATCH: bool = false;
 
-    type ReturnType = Precision;
-    type InputType<'a> = &'a [Precision];
+    type ReturnType = Float;
+    type InputType<'a> = &'a [Float];
 
     fn get_samples_count(_input: &Self::InputType<'_>) -> usize {
         1
@@ -53,15 +53,15 @@ impl GpuBatchMode for SingleBatchMode {
         0.0
     }
 
-    fn set_return(ret: &mut Self::ReturnType, _: usize, _: usize, value: Precision) {
-        *ret = value as Precision;
+    fn set_return(ret: &mut Self::ReturnType, _: usize, _: usize, value: Float) {
+        *ret = value as Float;
     }
 
-    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Precision> {
+    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Float> {
         let padded_len = Self::get_padded_len(Self::get_sample_length(input), pad_stride);
         let mut padded = vec![0.0; padded_len];
         for (padded, input) in padded.iter_mut().zip(input.iter()) {
-            *padded = *input as Precision;
+            *padded = *input as Float;
         }
 
         padded
@@ -71,7 +71,7 @@ impl GpuBatchMode for SingleBatchMode {
         input.len()
     }
 
-    fn apply_fn(ret: Self::ReturnType, func: impl Fn(Precision) -> Precision) -> Self::ReturnType {
+    fn apply_fn(ret: Self::ReturnType, func: impl Fn(Float) -> Float) -> Self::ReturnType {
         func(ret)
     }
 
@@ -88,9 +88,9 @@ pub struct MultiBatchMode;
 impl GpuBatchMode for MultiBatchMode {
     const IS_BATCH: bool = true;
 
-    type ReturnType = Vec<Vec<Precision>>;
+    type ReturnType = Vec<Vec<Float>>;
 
-    type InputType<'a> = &'a [Vec<Precision>];
+    type InputType<'a> = &'a [Vec<Float>];
 
     fn get_samples_count(input: &Self::InputType<'_>) -> usize {
         input.len()
@@ -100,16 +100,16 @@ impl GpuBatchMode for MultiBatchMode {
         vec![vec![0.0; blen]; alen]
     }
 
-    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Precision) {
-        ret[i][j] = value as Precision;
+    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Float) {
+        ret[i][j] = value as Float;
     }
 
-    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Precision> {
+    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Float> {
         let single_padded_len = Self::get_padded_len(Self::get_sample_length(input), pad_stride);
         let mut padded = vec![0.0; input.len() * single_padded_len];
         for i in 0..input.len() {
             for j in 0..input[i].len() {
-                padded[i * single_padded_len + j] = input[i][j] as Precision;
+                padded[i * single_padded_len + j] = input[i][j] as Float;
             }
         }
         padded
@@ -121,7 +121,7 @@ impl GpuBatchMode for MultiBatchMode {
 
     fn apply_fn(
         mut ret: Self::ReturnType,
-        func: impl Fn(Precision) -> Precision,
+        func: impl Fn(Float) -> Float,
     ) -> Self::ReturnType {
         for i in 0..ret.len() {
             for j in 0..ret[i].len() {
@@ -157,8 +157,9 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     params: G,
     a: M::InputType<'a>,
     b: M::InputType<'a>,
-    init_val: Precision,
+    init_val: Float,
 ) -> M::ReturnType {
+    let start_time = std::time::Instant::now();
     let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
         (b, a)
     } else {
@@ -212,6 +213,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         start += len;
     }
     let x = M::join_results(distances);
+    println!("diamond_partitioning_gpu: {:?}", start_time.elapsed());
     x
 }
 
@@ -226,11 +228,12 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     max_subgroup_threads: usize,
     a_sample_len: usize,
     b_sample_len: usize,
-    a: Vec<Precision>,
-    b: Vec<Precision>,
-    init_val: Precision,
+    a: Vec<Float>,
+    b: Vec<Float>,
+    init_val: Float,
     is_batch: bool,
 ) -> M::ReturnType {
+    let start_time = std::time::Instant::now();
     let padded_a_len = M::get_padded_len(a_sample_len, max_subgroup_threads);
     let padded_b_len = M::get_padded_len(b_sample_len, max_subgroup_threads);
 
@@ -335,6 +338,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
             );
         }
     }
+    println!("diamond_partitioning_gpu_: {:?}", start_time.elapsed(),);
     res
 }
 

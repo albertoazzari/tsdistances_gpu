@@ -1,18 +1,18 @@
-use crate::Precision;
+use crate::Float;
 pub struct GpuMatrix<'a> {
-    diagonal: &'a mut [Precision],
+    diagonal: &'a mut [Float],
     diagonal_offset: usize,
     mask: usize,
 }
 
 impl GpuMatrix<'_> {
     #[inline(always)]
-    fn get_diagonal_cell(&self, _diag_row: usize, diag_offset: isize) -> Precision {
+    fn get_diagonal_cell(&self, _diag_row: usize, diag_offset: isize) -> Float {
         self.diagonal[self.diagonal_offset + (diag_offset as usize & self.mask)]
     }
 
     #[inline(always)]
-    fn set_diagonal_cell(&mut self, _diag_row: usize, diag_offset: isize, value: Precision) {
+    fn set_diagonal_cell(&mut self, _diag_row: usize, diag_offset: isize, value: Float) {
         self.diagonal[self.diagonal_offset + (diag_offset as usize & self.mask)] = value;
     }
 }
@@ -36,7 +36,7 @@ macro_rules! warp_kernel_spec {
     )*) => {
         $(
             pub mod $name {
-                use crate::Precision;
+                use crate::Float;
                 #[cfg(not(target_arch = "spirv"))]
                 pub mod cpu {
                     use std::sync::Arc;
@@ -45,7 +45,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, Precision};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, Float};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -86,9 +86,9 @@ macro_rules! warp_kernel_spec {
                             a_len: u64,
                             b_len: u64,
                             max_subgroup_threads: u64,
-                            a: &Subbuffer<[Precision]>,
-                            b: &Subbuffer<[Precision]>,
-                            diagonal: &mut Subbuffer<[Precision]>,
+                            a: &Subbuffer<[Float]>,
+                            b: &Subbuffer<[Float]>,
+                            diagonal: &mut Subbuffer<[Float]>,
                             batch_info: Option<BatchInfo>,
                             _kernel_params: &Self::KernelParams,
                         ) {
@@ -196,7 +196,7 @@ macro_rules! warp_kernel_spec {
                 }
 
                 #[cfg(target_arch = "spirv")]
-                use spirv_std::{glam::UVec3, spirv, num_traits::Float};
+                use spirv_std::{glam::UVec3, spirv, num_traits::Float as SpirvFloat};
 
                 #[cfg(target_arch = "spirv")]
                 #[inline(always)]
@@ -209,8 +209,8 @@ macro_rules! warp_kernel_spec {
                     diag_count: u64,
                     warp: u64,
                     max_subgroup_threads: u64,
-                    $a: &[Precision],
-                    $b: &[Precision],
+                    $a: &[Float],
+                    $b: &[Float],
                     $a_offset: usize,
                     $b_offset: usize,
                     $($param1: $ty1,)?
@@ -268,11 +268,11 @@ macro_rules! warp_kernel_spec {
                     a_len: u64,
                     b_len: u64,
                     max_subgroup_threads: u64,
-                    diagonal: &mut [Precision],
+                    diagonal: &mut [Float],
                     diagonal_offset: u64,
                     diagonal_len: u64,
-                    $a: &[Precision],
-                    $b: &[Precision],
+                    $a: &[Float],
+                    $b: &[Float],
                     $a_offset: usize,
                     $b_offset: usize,
                     $($param1: $ty1,)?
@@ -327,9 +327,9 @@ macro_rules! warp_kernel_spec {
                 pub fn single_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [Precision],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[Precision],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[Precision],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [Float],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[Float],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[Float],
                     $(#[spirv(storage_buffer, descriptor_set = 0, binding = 3)] vec5: &[$ty5],)?
                 ) {
 
@@ -372,9 +372,9 @@ macro_rules! warp_kernel_spec {
                 pub fn batch_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [Precision],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[Precision],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[Precision],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [Float],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[Float],
+                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[Float],
                     $(#[spirv(storage_buffer, descriptor_set = 0, binding = 3)] vec5: &[$ty5],)?
                 ) {
 
@@ -440,7 +440,7 @@ pub mod kernel_trait {
     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
     use vulkano::device::Device;
 
-    use crate::Precision;
+    use crate::Float;
 
     pub struct BatchInfo {
         pub padded_a_len: u64,
@@ -468,35 +468,35 @@ pub mod kernel_trait {
             a_len: u64,
             b_len: u64,
             max_subgroup_threads: u64,
-            a: &Subbuffer<[Precision]>,
-            b: &Subbuffer<[Precision]>,
-            diagonal: &mut Subbuffer<[Precision]>,
+            a: &Subbuffer<[Float]>,
+            b: &Subbuffer<[Float]>,
+            diagonal: &mut Subbuffer<[Float]>,
             batch_info: Option<BatchInfo>,
             kernel_params: &Self::KernelParams,
         );
     }
 }
 
-const MSM_C: Precision = 1.0;
+const MSM_C: Float = 1.0;
 #[inline(always)]
-pub fn msm_cost_function(x: Precision, y: Precision, z: Precision) -> Precision {
+pub fn msm_cost_function(x: Float, y: Float, z: Float) -> Float {
     MSM_C + (y.min(z) - x).max(x - y.max(z)).max(0.0)
 }
 
 warp_kernel_spec! {
-    fn erp_distance[ERPImpl](a[a_offset], b[b_offset], i, j, x, y, z, [gap_penalty: Precision], [], [], [], []) {
+    fn erp_distance[ERPImpl](a[a_offset], b[b_offset], i, j, x, y, z, [gap_penalty: Float], [], [], [], []) {
         (y + (a[a_offset + i as usize] - b[b_offset + j as usize]).abs())
         .min((z + (a[a_offset + i as usize] - gap_penalty).abs()).min(x + (b[b_offset + j as usize] - gap_penalty).abs()))
     }
-    fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: Precision], [], [], [], []) {
+    fn lcss_distance[LCSSImpl](a[a_offset], b[b_offset], i, j, x, y, z, [epsilon: Float], [], [], [], []) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).abs();
-        (dist <= epsilon) as i32 as Precision * (y + 1.0) + (dist > epsilon) as i32 as Precision * x.max(z)
+        (dist <= epsilon) as i32 as Float * (y + 1.0) + (dist > epsilon) as i32 as Float * x.max(z)
     }
     fn dtw_distance[DTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], []) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
         dist + z.min(x.min(y))
     }
-    fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: Precision]) {
+    fn wdtw_distance[WDTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [], [], [], [], [weights: Float]) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2) * weights[(i as i32 - j as i32).abs() as usize];
         dist + x.min(y.min(z))
     }
@@ -509,7 +509,7 @@ warp_kernel_spec! {
             x + super::msm_cost_function(b[b_offset + j as usize], a[a_offset + i as usize], if j == 0 {0.0} else {b[b_offset + j as usize - 1]}),
         )
     }
-    fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: Precision], [penalty: Precision], [], [], []) {
+    fn twe_distance[TWEImpl](a[a_offset], b[b_offset], i, j, x, y, z, [stiffness: Float], [penalty: Float], [], [], []) {
         let delete_addition = penalty + stiffness;
         // deletion in a
         let del_a =
@@ -527,11 +527,11 @@ warp_kernel_spec! {
         let match_a_b = y
             + match_current
             + match_previous
-            + stiffness * (2.0 * (i as isize - j as isize).abs() as Precision);
+            + stiffness * (2.0 * (i as isize - j as isize).abs() as Float);
 
         del_a.min(del_b.min(match_a_b))
     }
-    fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: Precision], [], [], [], []) {
+    fn adtw_distance[ADTWImpl](a[a_offset], b[b_offset], i, j, x, y, z, [w: Float], [], [], [], []) {
         let dist = (a[a_offset + i as usize] - b[b_offset + j as usize]).powi(2);
                 dist + (z + w).min((x + w).min(y))
     }

@@ -2,7 +2,9 @@
 #![allow(unexpected_cfgs)]
 
 pub mod kernels;
-pub type Precision = f32;
+pub type Float = f64;
+// dtw: 102.244513ms
+// GPU DTW time: 447.908912ms
 
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
@@ -25,7 +27,7 @@ mod cpu {
     use crate::kernels::wdtw_distance::cpu::WDTWImpl;
     use crate::warps::diamond_partitioning_gpu;
     use crate::warps::GpuBatchMode;
-    use crate::Precision;
+    use crate::Float;
     use std::sync::Arc;
 
     use vulkano::buffer::allocator::SubbufferAllocator;
@@ -43,7 +45,7 @@ mod cpu {
         sa: Arc<SubbufferAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        gap_penalty: Precision,
+        gap_penalty: Float,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -52,11 +54,11 @@ mod cpu {
             dsa,
             sa,
             ERPImpl {
-                gap_penalty: gap_penalty as Precision,
+                gap_penalty: gap_penalty as Float,
             },
             a,
             b,
-            Precision::INFINITY,
+            Float::INFINITY,
         )
     }
 
@@ -68,7 +70,7 @@ mod cpu {
         sa: Arc<SubbufferAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        epsilon: Precision,
+        epsilon: Float,
     ) -> M::ReturnType {
         let similarity = diamond_partitioning_gpu::<_, M>(
             device,
@@ -77,14 +79,14 @@ mod cpu {
             dsa,
             sa,
             LCSSImpl {
-                epsilon: epsilon as Precision,
+                epsilon: epsilon as Float,
             },
             a,
             b,
             0.0,
         );
         let min_len =
-            M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as Precision;
+            M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as Float;
         M::apply_fn(similarity, |s| 1.0 - s / min_len)
     }
 
@@ -97,7 +99,8 @@ mod cpu {
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(
+        let start_time = std::time::Instant::now();
+        let res = diamond_partitioning_gpu::<_, M>(
             device,
             queue,
             sba,
@@ -106,8 +109,10 @@ mod cpu {
             DTWImpl {},
             a,
             b,
-            Precision::INFINITY,
-        )
+            Float::INFINITY,
+        );
+        println!("dtw: {:?}", start_time.elapsed());
+        res
     }
 
     pub fn wdtw<'a, M: GpuBatchMode>(
@@ -118,12 +123,12 @@ mod cpu {
         sa: Arc<SubbufferAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        weights: &[Precision],
+        weights: &[Float],
     ) -> M::ReturnType {
         let weights = weights
             .iter()
-            .map(|x| *x as Precision)
-            .collect::<Vec<Precision>>();
+            .map(|x| *x as Float)
+            .collect::<Vec<Float>>();
 
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -134,7 +139,7 @@ mod cpu {
             WDTWImpl { weights: weights },
             a,
             b,
-            Precision::INFINITY,
+            Float::INFINITY,
         )
     }
 
@@ -156,7 +161,7 @@ mod cpu {
             MSMImpl {},
             a,
             b,
-            Precision::INFINITY,
+            Float::INFINITY,
         )
     }
 
@@ -168,8 +173,8 @@ mod cpu {
         sa: Arc<SubbufferAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        stiffness: Precision,
-        penalty: Precision,
+        stiffness: Float,
+        penalty: Float,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -178,12 +183,12 @@ mod cpu {
             dsa,
             sa,
             TWEImpl {
-                stiffness: stiffness as Precision,
-                penalty: penalty as Precision,
+                stiffness: stiffness as Float,
+                penalty: penalty as Float,
             },
             a,
             b,
-            Precision::INFINITY,
+            Float::INFINITY,
         )
     }
 
@@ -195,7 +200,7 @@ mod cpu {
         sa: Arc<SubbufferAllocator>,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        w: Precision,
+        w: Float,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -203,10 +208,10 @@ mod cpu {
             sba,
             dsa,
             sa,
-            ADTWImpl { w: w as Precision },
+            ADTWImpl { w: w as Float },
             a,
             b,
-            Precision::INFINITY,
+            Float::INFINITY,
         )
     }
 }
