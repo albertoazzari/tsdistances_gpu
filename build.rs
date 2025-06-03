@@ -12,7 +12,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .capability(Capability::VulkanMemoryModel)
         .capability(Capability::Int8)
         .capability(Capability::Int64)
-        .capability(Capability::Float64)
         .build()?;
 
     Ok(())

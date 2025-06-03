@@ -28,6 +28,8 @@ where
 }
 
 const WEIGHT_MAX: Float = 1.0;
+const TOL: Float = 1e-2;
+
 fn dtw_weights(len: usize, g: Float) -> Vec<Float> {
     let mut weights = vec![0.0; len];
     let half_len = len as Float / 2.0;
@@ -55,9 +57,7 @@ pub fn test_erp() {
 
     let ts = read_csv("tests/data/ts.csv").unwrap();
     let erp_ts: Vec<Vec<Float>> = read_csv("tests/results/erp.csv").unwrap();
-
     let gap_penalty = 1.0;
-    let start_time = std::time::Instant::now();
     let result = crate::cpu::erp::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -68,11 +68,9 @@ pub fn test_erp() {
         &ts,
         gap_penalty,
     );
-
-    println!("GPU ERP time: {:?}", start_time.elapsed());
     for i in 0..ts.len() - 1 {
         for j in i + 1..ts.len() {
-            assert_eq_with_tol!(result[i][j], erp_ts[i][j], 1e-6);
+            assert_eq_with_tol!(result[i][j], erp_ts[i][j], TOL);
         }
     }
 }
@@ -84,7 +82,6 @@ pub fn test_lcss() {
     let data = read_csv("tests/data/ts.csv").unwrap();
     let lcss_ts: Vec<Vec<Float>> = read_csv("tests/results/lcss.csv").unwrap();
     let epsilon = 1.0;
-    let start_time = std::time::Instant::now();
     let result = crate::cpu::lcss::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -95,23 +92,19 @@ pub fn test_lcss() {
         &data,
         epsilon,
     );
-    println!("GPU LCSS time: {:?}", start_time.elapsed());
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
-            assert_eq_with_tol!(result[i][j], lcss_ts[i][j], 1e-6);
+            assert_eq_with_tol!(result[i][j], lcss_ts[i][j], TOL);
         }
     }
 }
 
 #[test]
 pub fn test_dtw() {
+    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let dtw_ts: Vec<Vec<Float>> = read_csv("tests/results/dtw.csv").unwrap();
-    let n_runs = 1;
-    let mut avg_time = std::time::Duration::new(0, 0);
-    for _ in 0..n_runs {
-        let start_time = std::time::Instant::now();
-        let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let dtw_ts: Vec<Vec<Float>> = read_csv("tests/results/dtw.csv").unwrap();let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
         let result = crate::cpu::dtw::<MultiBatchMode>(
             device.clone(),
@@ -122,9 +115,11 @@ pub fn test_dtw() {
             &data,
             &data,
         );
-        avg_time += start_time.elapsed();
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], dtw_ts[i][j], TOL);
+        }
     }
-    println!("GPU DTW time: {:?}", avg_time);
 }
 
 #[test]
@@ -134,7 +129,6 @@ pub fn test_wdtw() {
     let g = 0.05;
     let data = read_csv("tests/data/ts.csv").unwrap();
     let wdtw_ts: Vec<Vec<Float>> = read_csv("tests/results/wdtw.csv").unwrap();
-    let start_time = std::time::Instant::now();
     let result = crate::cpu::wdtw::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -145,10 +139,9 @@ pub fn test_wdtw() {
         &data,
         &dtw_weights(data[0].len(), g),
     );
-    println!("GPU WDTW time: {:?}", start_time.elapsed());
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
-            assert_eq_with_tol!(result[i][j], wdtw_ts[i][j], 1e-6);
+            assert_eq_with_tol!(result[i][j], wdtw_ts[i][j], TOL);
         }
     }
 }
@@ -159,7 +152,6 @@ pub fn test_msm() {
 
     let data = read_csv("tests/data/ts.csv").unwrap();
     let msm_ts: Vec<Vec<Float>> = read_csv("tests/results/msm.csv").unwrap();
-    let start_time = std::time::Instant::now();
     let result = crate::cpu::msm::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -169,10 +161,9 @@ pub fn test_msm() {
         &data,
         &data,
     );
-    println!("GPU MSM time: {:?}", start_time.elapsed());
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
-            assert_eq_with_tol!(result[i][j], msm_ts[i][j], 1e-6);
+            assert_eq_with_tol!(result[i][j], msm_ts[i][j], TOL);
         }
     }
 }
@@ -183,27 +174,26 @@ pub fn test_twe() {
     let penalty = 1.0;
     let data = read_csv("tests/data/ts.csv").unwrap();
     let twe_ts: Vec<Vec<Float>> = read_csv("tests/results/twe.csv").unwrap();
-    let runs = 10;
-    let mut avg_time = 0.0;
 
-    for _ in 0..runs {
-        let start_time = std::time::Instant::now();
-        let (device, queue, sba, sda, sa) = crate::utils::get_device();
+    let (device, queue, sba, sda, sa) = crate::utils::get_device();
 
-        let result = crate::cpu::twe::<MultiBatchMode>(
-            device.clone(),
-            queue.clone(),
-            sba.clone(),
-            sda.clone(),
-            sa.clone(),
-            &data,
-            &data,
-            stiffness,
-            penalty,
-        );
-        avg_time += start_time.elapsed().as_secs_f64();
+    let result = crate::cpu::twe::<MultiBatchMode>(
+        device.clone(),
+        queue.clone(),
+        sba.clone(),
+        sda.clone(),
+        sa.clone(),
+        &data,
+        &data,
+        stiffness,
+        penalty,
+    );
+
+    for i in 0..data.len() - 1 {
+        for j in i + 1..data.len() {
+            assert_eq_with_tol!(result[i][j], twe_ts[i][j], TOL);
+        }
     }
-    println!("GPU TWE time: {:?}s", avg_time / runs as f64);
 }
 
 #[test]
@@ -212,7 +202,6 @@ pub fn test_adtw() {
     let warp_penalty = 0.1;
     let data = read_csv("tests/data/ts.csv").unwrap();
     let adtw_ts: Vec<Vec<Float>> = read_csv("tests/results/adtw.csv").unwrap();
-    let start_time = std::time::Instant::now();
     let result = crate::cpu::adtw::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -223,11 +212,10 @@ pub fn test_adtw() {
         &data,
         warp_penalty,
     );
-    println!("GPU ADTW time: {:?}", start_time.elapsed());
 
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
-            assert_eq_with_tol!(result[i][j], adtw_ts[i][j], 1e-6);
+            assert_eq_with_tol!(result[i][j], adtw_ts[i][j], TOL);
         }
     }
 }

@@ -35,7 +35,7 @@ fn load(
     let entry_point_id = spirv_module
         .entry_points
         .iter()
-        .find(|entry| entry.operands[2].unwrap_literal_string() == entry_point) // Replace "main" with the desired entry point name
+        .find(|entry| entry.operands[2].unwrap_literal_string() == entry_point)
         .expect("Entry point not found")
         .operands[1]
         .unwrap_id_ref(); // Operand[1] is the function ID

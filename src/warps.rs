@@ -119,10 +119,7 @@ impl GpuBatchMode for MultiBatchMode {
         input.first().map_or(0, |x| x.len())
     }
 
-    fn apply_fn(
-        mut ret: Self::ReturnType,
-        func: impl Fn(Float) -> Float,
-    ) -> Self::ReturnType {
+    fn apply_fn(mut ret: Self::ReturnType, func: impl Fn(Float) -> Float) -> Self::ReturnType {
         for i in 0..ret.len() {
             for j in 0..ret[i].len() {
                 ret[i][j] = func(ret[i][j]);
@@ -159,7 +156,6 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     b: M::InputType<'a>,
     init_val: Float,
 ) -> M::ReturnType {
-    let start_time = std::time::Instant::now();
     let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
         (b, a)
     } else {
@@ -213,7 +209,6 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         start += len;
     }
     let x = M::join_results(distances);
-    println!("diamond_partitioning_gpu: {:?}", start_time.elapsed());
     x
 }
 
@@ -233,7 +228,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     init_val: Float,
     is_batch: bool,
 ) -> M::ReturnType {
-    let start_time = std::time::Instant::now();
     let padded_a_len = M::get_padded_len(a_sample_len, max_subgroup_threads);
     let padded_b_len = M::get_padded_len(b_sample_len, max_subgroup_threads);
 
@@ -338,7 +332,6 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
             );
         }
     }
-    println!("diamond_partitioning_gpu_: {:?}", start_time.elapsed(),);
     res
 }
 

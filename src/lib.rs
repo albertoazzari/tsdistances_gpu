@@ -2,9 +2,7 @@
 #![allow(unexpected_cfgs)]
 
 pub mod kernels;
-pub type Float = f64;
-// dtw: 102.244513ms
-// GPU DTW time: 447.908912ms
+pub type Float = f32;
 
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
@@ -111,7 +109,6 @@ mod cpu {
             b,
             Float::INFINITY,
         );
-        println!("dtw: {:?}", start_time.elapsed());
         res
     }
 
@@ -125,10 +122,7 @@ mod cpu {
         b: M::InputType<'a>,
         weights: &[Float],
     ) -> M::ReturnType {
-        let weights = weights
-            .iter()
-            .map(|x| *x as Float)
-            .collect::<Vec<Float>>();
+        let weights = weights.iter().map(|x| *x as Float).collect::<Vec<Float>>();
 
         diamond_partitioning_gpu::<_, M>(
             device,
