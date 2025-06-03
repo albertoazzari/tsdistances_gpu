@@ -13,7 +13,7 @@ use vulkano::{
 
 static SHADE_PIPELINES: OnceLock<DashMap<&'static str, Arc<ComputePipeline>>> = OnceLock::new();
 
-const SHADER_CODE: &[u8] = include_bytes!(env!("tsdistances.spv"));
+const SHADER_CODE: &[u8] = include_bytes!(env!("tsdistances_gpu.spv"));
 
 use rspirv::binary::Assemble;
 use rspirv::spirv::{ExecutionMode, Op};
