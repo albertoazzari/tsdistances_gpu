@@ -10,7 +10,7 @@ mod shader_load;
 #[cfg(test)]
 mod tests;
 #[cfg(not(target_arch = "spirv"))]
-mod utils;
+pub mod utils;
 #[cfg(not(target_arch = "spirv"))]
 mod warps;
 
@@ -97,7 +97,6 @@ mod cpu {
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
-        let start_time = std::time::Instant::now();
         let res = diamond_partitioning_gpu::<_, M>(
             device,
             queue,
