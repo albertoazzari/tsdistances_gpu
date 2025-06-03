@@ -15,7 +15,7 @@ pub mod utils;
 pub mod warps;
 
 #[cfg(not(target_arch = "spirv"))]
-mod cpu {
+pub mod cpu {
     use crate::kernels::adtw_distance::cpu::ADTWImpl;
     use crate::kernels::dtw_distance::cpu::DTWImpl;
     use crate::kernels::erp_distance::cpu::ERPImpl;
