@@ -12,7 +12,7 @@ mod tests;
 #[cfg(not(target_arch = "spirv"))]
 pub mod utils;
 #[cfg(not(target_arch = "spirv"))]
-mod warps;
+pub mod warps;
 
 #[cfg(not(target_arch = "spirv"))]
 mod cpu {
