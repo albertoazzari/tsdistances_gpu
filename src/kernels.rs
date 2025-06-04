@@ -67,9 +67,10 @@ macro_rules! warp_kernel_spec {
                         fn build_kernel_params(
                             &self,
                             _allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
+                            max_work_group_size: usize,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator))?
+                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, max_work_group_size))?
                             }
                         }
 
@@ -170,7 +171,7 @@ macro_rules! warp_kernel_spec {
                                 .properties()
                                 .max_compute_work_group_size[0];
 
-                            unsafe { builder.dispatch([threads_count / max_threads_x, 1u32, 1u32]) }.unwrap();
+                            unsafe { builder.dispatch([threads_count.div_ceil(max_threads_x), 1u32, 1u32]) }.unwrap();
                         }
                     }
                 }
@@ -453,6 +454,7 @@ pub mod kernel_trait {
         fn build_kernel_params(
             &self,
             allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
+            max_work_group_size: usize,
         ) -> Self::KernelParams;
 
         fn dispatch(

@@ -24,7 +24,7 @@ pub trait GpuBatchMode {
     fn get_samples_count(input: &Self::InputType<'_>) -> usize;
     fn new_return(alen: usize, blen: usize) -> Self::ReturnType;
     fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Float);
-    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Float>;
+    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float>;
     fn get_sample_length(input: &Self::InputType<'_>) -> usize;
     fn get_padded_len(sample_length: usize, pad_stride: usize) -> usize {
         next_multiple_of_n(sample_length, pad_stride)
@@ -57,8 +57,8 @@ impl GpuBatchMode for SingleBatchMode {
         *ret = value as Float;
     }
 
-    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Float> {
-        let padded_len = Self::get_padded_len(Self::get_sample_length(input), pad_stride);
+    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float> {
+        let padded_len = Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
         let mut padded = vec![0.0; padded_len];
         for (padded, input) in padded.iter_mut().zip(input.iter()) {
             *padded = *input as Float;
@@ -104,9 +104,9 @@ impl GpuBatchMode for MultiBatchMode {
         ret[i][j] = value as Float;
     }
 
-    fn build_padded(input: &Self::InputType<'_>, pad_stride: usize) -> Vec<Float> {
-        let single_padded_len = Self::get_padded_len(Self::get_sample_length(input), pad_stride);
-        let mut padded = vec![0.0; input.len() * single_padded_len];
+    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float> {
+        let single_padded_len = Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
+        let mut padded = vec![0.0; single_padded_len * input.len()];
         for i in 0..input.len() {
             for j in 0..input[i].len() {
                 padded[i * single_padded_len + j] = input[i][j] as Float;
@@ -164,13 +164,14 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     let properties = device.physical_device().properties();
 
-    let max_subgroup_threads = properties.max_subgroup_size.unwrap() as usize;
+    let max_subgroup_size = properties.max_subgroup_size.unwrap() as usize;
+    let max_workgroup_size = properties.max_compute_work_group_size[0] as usize;
 
     let max_storage_buffer_range = properties.max_storage_buffer_range as usize;
 
     let a_sample_length = M::get_sample_length(&a);
 
-    let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_threads);
+    let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_size);
 
     let max_buffer_size = max_storage_buffer_range as usize;
 
@@ -188,8 +189,11 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     while start < a_len {
         let len = a_batch_size.min(a_len - start);
         let a = M::get_subslice(&a, start, len);
-        let a_padded = M::build_padded(&a, max_subgroup_threads);
-        let b_padded = M::build_padded(&b, max_subgroup_threads);
+        let a_padded = M::build_padded(&a, max_subgroup_size);
+        let b_padded = M::build_padded(&b, max_subgroup_size);
+
+        let a_count = len;
+        let b_count = M::get_samples_count(&b);
 
         distances.push(diamond_partitioning_gpu_::<G, M>(
             device.clone(),
@@ -198,11 +202,14 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
             descriptor_set_allocator.clone(),
             subbuffer_allocator.clone(),
             &params,
-            max_subgroup_threads as usize,
+            max_subgroup_size,
+            max_workgroup_size,
             M::get_sample_length(&a),
             M::get_sample_length(&b),
             a_padded,
             b_padded,
+            a_count,
+            b_count,
             init_val,
             M::IS_BATCH,
         ));
@@ -221,18 +228,18 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     buffer_allocator: Arc<SubbufferAllocator>,
     params: &G,
     max_subgroup_threads: usize,
+    max_workgroup_size: usize,
     a_sample_len: usize,
     b_sample_len: usize,
     a: Vec<Float>,
     b: Vec<Float>,
+    a_count: usize,
+    b_count: usize,
     init_val: Float,
     is_batch: bool,
 ) -> M::ReturnType {
     let padded_a_len = M::get_padded_len(a_sample_len, max_subgroup_threads);
     let padded_b_len = M::get_padded_len(b_sample_len, max_subgroup_threads);
-
-    let a_count = a.len() / padded_a_len;
-    let b_count = b.len() / padded_b_len;
 
     let diag_len = compute_diag_len::<M>(a_sample_len, max_subgroup_threads);
 
@@ -258,10 +265,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     )
     .unwrap();
 
-    let a_gpu = move_gpu(&a, &buffer_allocator);
-    let b_gpu = move_gpu(&b, &buffer_allocator);
-    let mut diagonal = move_gpu(&diagonal, &buffer_allocator);
-    let kernel_params = params.build_kernel_params(buffer_allocator.clone());
+    let a_gpu = move_gpu(&a, &buffer_allocator, max_workgroup_size);
+    let b_gpu = move_gpu(&b, &buffer_allocator, max_workgroup_size);
+    let mut diagonal = move_gpu(&diagonal, &buffer_allocator, max_workgroup_size);
+    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), max_workgroup_size);
 
     // Number of kernel calls
     for i in 0..rows_count {

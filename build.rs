@@ -6,10 +6,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    SpirvBuilder::new(".", "spirv-unknown-vulkan1.2")
+    SpirvBuilder::new(".", "spirv-unknown-spv1.5")
         .print_metadata(MetadataPrintout::Full)
         .spirv_metadata(SpirvMetadata::NameVariables)
-        .capability(Capability::VulkanMemoryModel)
+        // .capability(Capability::VulkanMemoryModel)
         .capability(Capability::Int8)
         .capability(Capability::Int64)
         .build()?;

@@ -1,6 +1,6 @@
 use crate::{
     assert_eq_with_tol,
-    warps::{MultiBatchMode, SingleBatchMode},
+    warps::{MultiBatchMode},
     Float,
 };
 use csv::ReaderBuilder;
@@ -28,7 +28,7 @@ where
 }
 
 const WEIGHT_MAX: Float = 1.0;
-const TOL: Float = 1e-2;
+const TOL: Float = 1e-4;
 
 fn dtw_weights(len: usize, g: Float) -> Vec<Float> {
     let mut weights = vec![0.0; len];
@@ -44,10 +44,12 @@ fn dtw_weights(len: usize, g: Float) -> Vec<Float> {
 fn test_device() {
     let (device, _, _, _, _) = crate::utils::get_device();
     println!(
-        "Physical device: {:?} \nmax threads per workgroup: {:?}, \nmax compute work group size: {:?}",
+        "Physical device: {:?} \nmax counts: {:?}, \nmax size: {:?}, \n subgroup size: {:?}, \nmax storage buffer range: {:?}",
         device.physical_device().properties().device_name,
+        device.physical_device().properties().max_compute_work_group_count,
         device.physical_device().properties().max_compute_work_group_size,
-        device.physical_device().properties().max_compute_work_group_invocations
+        device.physical_device().properties().max_subgroup_size,
+        device.physical_device().properties().max_storage_buffer_range
     );
 }
 
@@ -104,7 +106,7 @@ pub fn test_dtw() {
     let (device, queue, sba, sda, ma) = crate::utils::get_device();
 
     let data = read_csv("tests/data/ts.csv").unwrap();
-    let dtw_ts: Vec<Vec<Float>> = read_csv("tests/results/dtw.csv").unwrap();let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let dtw_ts: Vec<Vec<Float>> = read_csv("tests/results/dtw.csv").unwrap();
 
         let result = crate::cpu::dtw::<MultiBatchMode>(
             device.clone(),

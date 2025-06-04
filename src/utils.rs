@@ -40,7 +40,7 @@ type CachedCore = (
 );
 
 static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
-    let start_time = std::time::Instant::now();
+    
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
         library,
@@ -78,7 +78,7 @@ static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
             enabled_extensions: device_extensions,
             enabled_features: {
                 let mut features = DeviceFeatures::default();
-                features.vulkan_memory_model = true;
+                // features.vulkan_memory_model = true;
                 features.shader_int8 = true;
                 features.shader_int64 = true;
                 features
@@ -143,10 +143,14 @@ pub fn get_device() -> (
 pub fn move_gpu<T: BufferContents + Copy>(
     data: &[T],
     subbuffer_allocator: &Arc<SubbufferAllocator>,
+    alignment: usize,
 ) -> Subbuffer<[T]> {
+
+    let padded_len = data.len().div_ceil(alignment) * alignment;
+
     let buffer = subbuffer_allocator
-        .allocate_slice(data.len() as u64)
+        .allocate_slice(padded_len as u64)
         .unwrap();
-    buffer.write().unwrap().copy_from_slice(&data);
+    buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
     buffer
 }
