@@ -93,17 +93,17 @@ macro_rules! warp_kernel_spec {
                             batch_info: Option<BatchInfo>,
                             _kernel_params: &Self::KernelParams,
                         ) {
-                            let (kernel_name, padded_a_len, padded_b_len, threads_count) = match batch_info {
+                            let (kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride) = match batch_info {
                                 Some(batch_info) =>
                                 {
-                                    let a_count = a.len() as u64 / batch_info.padded_a_len;
-                                    let b_count = b.len() as u64 / batch_info.padded_b_len;
-
                                     (
                                         concat!("kernels::", stringify!($name), "::batch_call"),
                                         batch_info.padded_a_len,
                                         batch_info.padded_b_len,
-                                        (a_count * b_count * diamonds_count * max_subgroup_threads) as u32
+                                        (batch_info.a_count * batch_info.b_count * diamonds_count * max_subgroup_threads) as u32,
+                                        batch_info.a_count,
+                                        batch_info.b_count,
+                                        batch_info.diagonal_stride,
                                     )
                                 },
                                 None => {
@@ -111,7 +111,10 @@ macro_rules! warp_kernel_spec {
                                         concat!("kernels::", stringify!($name), "::single_call"),
                                         0u64,
                                         0u64,
-                                        (diamonds_count * max_subgroup_threads) as u32
+                                        (diamonds_count * max_subgroup_threads) as u32,
+                                        1,
+                                        1,
+                                        (diamonds_count * max_subgroup_threads) as u64,
                                     )
                                 },
                             };
@@ -140,6 +143,9 @@ macro_rules! warp_kernel_spec {
                                     b_start,
                                     a_len,
                                     b_len,
+                                    a_count,
+                                    b_count,
+                                    diagonal_stride,
                                     max_subgroup_threads,
                                     $(param1: self.$param1,)?
                                     $(param2: self.$param2,)?
@@ -187,6 +193,9 @@ macro_rules! warp_kernel_spec {
                     b_start: u64,
                     a_len: u64,
                     b_len: u64,
+                    a_count: u64,
+                    b_count: u64,
+                    diagonal_stride: u64,
                     max_subgroup_threads: u64,
                     $(param1: $ty1,)?
                     $(param2: $ty2,)?
@@ -392,14 +401,10 @@ macro_rules! warp_kernel_spec {
                     let pair_index = global_id / threads_stride;
                     let instance_id = global_id % threads_stride;
 
-                    let a_count = $a.len() / constants.padded_a_len as usize;
-                    let b_count = $b.len() / constants.padded_b_len as usize;
+                    let a_index = pair_index / constants.b_count as u64;
+                    let b_index = pair_index % constants.b_count as u64;
 
-                    let a_index = pair_index / b_count as u64;
-                    let b_index = pair_index % b_count as u64;
-
-                    let diagonal_stride = (diagonal.len() / (a_count * b_count)) as u64;
-                    let diagonal_offset = pair_index * diagonal_stride;
+                    let diagonal_offset = pair_index * constants.diagonal_stride;
 
                     let $a_offset = a_index as usize * constants.padded_a_len as usize;
                     let $b_offset = b_index as usize * constants.padded_b_len as usize;
@@ -416,7 +421,7 @@ macro_rules! warp_kernel_spec {
                         constants.max_subgroup_threads,
                         diagonal,
                         diagonal_offset,
-                        diagonal_stride,
+                        constants.diagonal_stride,
                         $a,
                         $b,
                         $a_offset,
@@ -446,6 +451,9 @@ pub mod kernel_trait {
     pub struct BatchInfo {
         pub padded_a_len: u64,
         pub padded_b_len: u64,
+        pub a_count: u64,
+        pub b_count: u64,
+        pub diagonal_stride: u64,
     }
 
     pub trait GpuKernelImpl {

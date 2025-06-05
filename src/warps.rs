@@ -291,6 +291,9 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
                 Some(BatchInfo {
                     padded_a_len: padded_a_len as u64,
                     padded_b_len: padded_b_len as u64,
+                    a_count: a_count as u64,
+                    b_count: b_count as u64,
+                    diagonal_stride: diag_len as u64,
                 })
             } else {
                 None
