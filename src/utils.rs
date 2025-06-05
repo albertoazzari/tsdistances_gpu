@@ -40,7 +40,6 @@ type CachedCore = (
 );
 
 static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
-    
     let library = VulkanLibrary::new().unwrap();
     let instance = Instance::new(
         library,
@@ -145,7 +144,6 @@ pub fn move_gpu<T: BufferContents + Copy>(
     subbuffer_allocator: &Arc<SubbufferAllocator>,
     alignment: usize,
 ) -> Subbuffer<[T]> {
-
     let padded_len = data.len().div_ceil(alignment) * alignment;
 
     let buffer = subbuffer_allocator
