@@ -7,9 +7,6 @@ pub type Float = f32;
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
 #[cfg(not(target_arch = "spirv"))]
-#[cfg(test)]
-mod tests;
-#[cfg(not(target_arch = "spirv"))]
 pub mod utils;
 #[cfg(not(target_arch = "spirv"))]
 pub mod warps;

@@ -105,7 +105,8 @@ impl GpuBatchMode for MultiBatchMode {
     }
 
     fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float> {
-        let single_padded_len = Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
+        let single_padded_len =
+            Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
         let mut padded = vec![0.0; single_padded_len * input.len()];
         for i in 0..input.len() {
             for j in 0..input[i].len() {

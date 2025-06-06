@@ -1,24 +1,6 @@
-use crate::{assert_eq_with_tol, warps::{MultiBatchMode, SingleBatchMode}, Float};
 use csv::ReaderBuilder;
 use std::error::Error;
-
-fn is_symmetric(matrix: &[Vec<Float>]) -> bool {
-    let n = matrix.len();
-    for i in 0..n {
-        for j in 0..n {
-            assert_eq!(matrix[i][j], matrix[j][i]);
-        }
-    }
-    true
-}
-
-fn is_zero_diagonal(matrix: &[Vec<Float>]) -> bool {
-    let n = matrix.len();
-    for i in 0..n {
-        assert_eq!(matrix[i][i], 0.0);
-    }
-    true
-}
+use tsdistances_gpu::{assert_eq_with_tol, cpu, utils, warps::MultiBatchMode, Float};
 
 fn read_csv<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn Error>>
 where
@@ -42,7 +24,7 @@ where
 }
 
 const WEIGHT_MAX: Float = 1.0;
-const TOL: Float = 1e-2;
+const TOL: Float = 1e-8;
 
 fn dtw_weights(len: usize, g: Float) -> Vec<Float> {
     let mut weights = vec![0.0; len];
@@ -56,7 +38,7 @@ fn dtw_weights(len: usize, g: Float) -> Vec<Float> {
 
 #[test]
 fn test_device() {
-    let (device, _, _, _, _) = crate::utils::get_device();
+    let (device, _, _, _, _) = utils::get_device();
     println!(
         "Physical device: {:?} \nmax counts: {:?}, \nmax size: {:?}, \n subgroup size: {:?}, \nmax storage buffer range: {:?}",
         device.physical_device().properties().device_name,
@@ -69,12 +51,12 @@ fn test_device() {
 
 #[test]
 pub fn test_erp() {
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let (device, queue, sba, sda, ma) = utils::get_device();
 
-    let ts = read_csv("tests/data/ts.csv").unwrap();
-    let erp_ts: Vec<Vec<Float>> = read_csv("tests/results/erp.csv").unwrap();
+    let ts = read_csv("data/ts.csv").unwrap();
+    let erp_ts: Vec<Vec<Float>> = read_csv("results/erp.csv").unwrap();
     let gap_penalty = 1.0;
-    let result = crate::cpu::erp::<MultiBatchMode>(
+    let result = cpu::erp::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -93,12 +75,12 @@ pub fn test_erp() {
 
 #[test]
 pub fn test_lcss() {
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let (device, queue, sba, sda, ma) = utils::get_device();
 
-    let data = read_csv("tests/data/ts.csv").unwrap();
-    let lcss_ts: Vec<Vec<Float>> = read_csv("tests/results/lcss.csv").unwrap();
+    let data = read_csv("data/ts.csv").unwrap();
+    let lcss_ts: Vec<Vec<Float>> = read_csv("results/lcss.csv").unwrap();
     let epsilon = 1.0;
-    let result = crate::cpu::lcss::<MultiBatchMode>(
+    let result = cpu::lcss::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -117,35 +99,45 @@ pub fn test_lcss() {
 
 #[test]
 pub fn test_dtw() {
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
-
     let data = read_csv("tests/data/ts.csv").unwrap();
     let dtw_ts: Vec<Vec<Float>> = read_csv("tests/results/dtw.csv").unwrap();
-
-    let result = crate::cpu::dtw::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &data,
-        &data,
-    );
-    for i in 0..data.len() - 1 {
-        for j in i + 1..data.len() {
-            assert_eq_with_tol!(result[i][j], dtw_ts[i][j], TOL);
+    let n_runs = 50;
+    let mut avg_time = std::time::Duration::from_secs(0);
+    for _ in 0..n_runs {
+        let start_time = std::time::Instant::now();
+        let (device, queue, sba, sda, ma) = utils::get_device();
+        let result = cpu::dtw::<MultiBatchMode>(
+            device.clone(),
+            queue.clone(),
+            sba.clone(),
+            sda.clone(),
+            ma.clone(),
+            &data,
+            &data,
+        );
+        let elapsed_time = start_time.elapsed();
+        avg_time += elapsed_time;
+        for i in 0..data.len() - 1 {
+            for j in i + 1..data.len() {
+                assert_eq_with_tol!(result[i][j], dtw_ts[i][j], TOL);
+            }
         }
     }
+    avg_time /= n_runs;
+    println!(
+        "Average DTW computation time over {} runs: {:?}",
+        n_runs, avg_time
+    );
 }
 
 #[test]
 pub fn test_wdtw() {
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let (device, queue, sba, sda, ma) = utils::get_device();
 
     let g = 0.05;
-    let data = read_csv("tests/data/ts.csv").unwrap();
-    let wdtw_ts: Vec<Vec<Float>> = read_csv("tests/results/wdtw.csv").unwrap();
-    let result = crate::cpu::wdtw::<MultiBatchMode>(
+    let data = read_csv("data/ts.csv").unwrap();
+    let wdtw_ts: Vec<Vec<Float>> = read_csv("results/wdtw.csv").unwrap();
+    let result = cpu::wdtw::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -164,11 +156,11 @@ pub fn test_wdtw() {
 
 #[test]
 pub fn test_msm() {
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let (device, queue, sba, sda, ma) = utils::get_device();
 
-    let data = read_csv("tests/data/ts.csv").unwrap();
-    let msm_ts: Vec<Vec<Float>> = read_csv("tests/results/msm.csv").unwrap();
-    let result = crate::cpu::msm::<MultiBatchMode>(
+    let data = read_csv("data/ts.csv").unwrap();
+    let msm_ts: Vec<Vec<Float>> = read_csv("results/msm.csv").unwrap();
+    let result = cpu::msm::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -188,13 +180,13 @@ pub fn test_msm() {
 pub fn test_twe() {
     let stiffness = 0.001;
     let penalty = 1.0;
-    let data = read_csv("tests/data/ts.csv").unwrap();
-    let twe_ts: Vec<Vec<Float>> = read_csv("tests/results/twe.csv").unwrap();
-    
-    let start_time = std::time::Instant::now();
-    let (device, queue, sba, sda, sa) = crate::utils::get_device();
+    let data = read_csv("data/ts.csv").unwrap();
+    let twe_ts: Vec<Vec<Float>> = read_csv("results/twe.csv").unwrap();
 
-    let result = crate::cpu::twe::<MultiBatchMode>(
+    let start_time = std::time::Instant::now();
+    let (device, queue, sba, sda, sa) = utils::get_device();
+
+    let result = cpu::twe::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -208,7 +200,7 @@ pub fn test_twe() {
     let elapsed_time = start_time.elapsed();
 
     println!("TWE computation time: {:.4?}", elapsed_time);
-    
+
     for i in 0..data.len() - 1 {
         for j in i + 1..data.len() {
             assert_eq_with_tol!(result[i][j], twe_ts[i][j], TOL);
@@ -218,11 +210,11 @@ pub fn test_twe() {
 
 #[test]
 pub fn test_adtw() {
-    let (device, queue, sba, sda, ma) = crate::utils::get_device();
+    let (device, queue, sba, sda, ma) = utils::get_device();
     let warp_penalty = 0.1;
-    let data = read_csv("tests/data/ts.csv").unwrap();
-    let adtw_ts: Vec<Vec<Float>> = read_csv("tests/results/adtw.csv").unwrap();
-    let result = crate::cpu::adtw::<MultiBatchMode>(
+    let data = read_csv("data/ts.csv").unwrap();
+    let adtw_ts: Vec<Vec<Float>> = read_csv("results/adtw.csv").unwrap();
+    let result = cpu::adtw::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
         sba.clone(),
