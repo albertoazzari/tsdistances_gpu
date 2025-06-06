@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .spirv_metadata(SpirvMetadata::NameVariables)
         .capability(Capability::Int8)
         .capability(Capability::Int64)
+        .capability(Capability::Float64)
         .build()?;
 
     Ok(())

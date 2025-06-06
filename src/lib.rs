@@ -2,7 +2,7 @@
 #![allow(unexpected_cfgs)]
 
 pub mod kernels;
-pub type Float = f32;
+pub type Float = f64;
 
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
