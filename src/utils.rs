@@ -79,7 +79,7 @@ static DEVICE_CORE: LazyLock<CachedCore> = LazyLock::new(|| {
                 let mut features = DeviceFeatures::default();
                 features.shader_int8 = true;
                 features.shader_int64 = true;
-                features.shader_float64 = true;
+                // features.shader_float64 = true;
                 features
             },
             queue_create_infos: vec![QueueCreateInfo {
