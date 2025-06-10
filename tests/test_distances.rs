@@ -65,9 +65,8 @@ fn test_lcss_distance() {
     let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
-
     let epsilon = 1.0;
-
+    let start = std::time::Instant::now();
     let result = lcss::<MultiBatchMode>(
         device.clone(),
         queue.clone(),
@@ -78,6 +77,8 @@ fn test_lcss_distance() {
         &test_data,
         epsilon,
     );
+    let elapsed = start.elapsed();
+    println!("LCSS elapsed time: {:?}", elapsed);
 }
 
 #[test]
