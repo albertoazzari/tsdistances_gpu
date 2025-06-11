@@ -22,24 +22,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let spirv_module = rspirv::dr::load_bytes(std::fs::read(compiled.module.unwrap_single())?)?;
     let target_env = TargetEnv::Universal_1_5;
     let validator = spirv_tools::val::create(Some(target_env));
-    validator.validate(spirv_module.assemble(), None)?;
     let mut optimizer = spirv_tools::opt::create(Some(target_env));
-    let passes =
-                [
-                    Passes::EliminateDeadFunctions,
-                    Passes::DeadVariableElimination,
-                    Passes::EliminateDeadConstant,
-                    Passes::CombineAccessChains,
-                    Passes::CompactIds,
-                ];
-            for pass in passes {
-                optimizer.register_pass(pass);
-            }
-            optimizer.register_performance_passes();
-    let optimizer = optimizer.optimize(spirv_module.assemble(), &mut |_| (), None)?;
+    optimizer.register_size_passes();
+    optimizer.register_performance_passes();
+    let optimized_spirv = optimizer.optimize(spirv_module.assemble(), &mut |_| (), None)?;
+    validator.validate(&optimized_spirv, None)?;
     std::fs::write(
         compiled.module.unwrap_single(),
-        optimizer.as_bytes(),
+        optimized_spirv.as_bytes(),
     )?;
     Ok(())
 }
