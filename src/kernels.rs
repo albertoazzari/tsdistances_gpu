@@ -176,6 +176,12 @@ macro_rules! warp_kernel_spec {
                                 .physical_device()
                                 .properties()
                                 .max_compute_work_group_size[0];
+                            
+                            // print kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride
+                            println!(
+                                "Dispatching kernel: {}, padded_a_len: {}, padded_b_len: {}, threads_count: {}, a_count: {}, b_count: {}, diagonal_stride: {}, max_threads_x: {}, threads_count: {}",
+                                kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride, max_threads_x, threads_count
+                            );
 
                             unsafe { builder.dispatch([threads_count.div_ceil(max_threads_x), 1u32, 1u32]) }.unwrap();
                         }
