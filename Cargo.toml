@@ -41,9 +41,7 @@ spirv-std = {  git = "https://github.com/Rust-GPU/rust-gpu.git", default-feature
 default = ["use-compiled-tools"]
 use-compiled-tools = [
     "spirv-builder/use-compiled-tools",
-    "spirv-tools/use-compiled-tools",
 ]
 use-installed-tools = [
     "spirv-builder/use-installed-tools",
-    "spirv-tools/use-installed-tools",
 ]

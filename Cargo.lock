@@ -1285,7 +1285,6 @@ dependencies = [
  "rspirv",
  "spirv-builder",
  "spirv-std",
- "spirv-tools",
  "vulkano",
 ]
 
