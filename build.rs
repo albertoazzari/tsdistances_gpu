@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let compiled = SpirvBuilder::new(".", "spirv-unknown-spv1.5")
         .print_metadata(MetadataPrintout::Full)
         .spirv_metadata(SpirvMetadata::NameVariables)
+        .release(true)
         .capability(Capability::Int8)
         .capability(Capability::Int64)
         .build()?;

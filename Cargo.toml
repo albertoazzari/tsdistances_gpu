@@ -11,7 +11,7 @@ crate-type = ["dylib", "rlib"]
 [build-dependencies]
 spirv-builder = { git = "https://github.com/Rust-GPU/rust-gpu.git", default-features = false }
 rspirv = "0.12.0"
-spirv-tools = { version = "0.11.0", default-features = false }
+spirv-tools = { version = "0.12.0", default-features = false }
 
 [profile.release]
 lto = true
