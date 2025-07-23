@@ -143,7 +143,8 @@ pub fn get_device() -> (
         memory_allocator,
         SubbufferAllocatorCreateInfo {
             buffer_usage: BufferUsage::TRANSFER_DST | BufferUsage::TRANSFER_SRC,
-            memory_type_filter: MemoryTypeFilter::PREFER_HOST,
+            memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
     ));
