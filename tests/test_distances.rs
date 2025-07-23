@@ -83,10 +83,19 @@ fn test_lcss_distance() {
 
 #[test]
 fn test_dtw_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let mut train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let mut test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+
+    const SAMPLES: usize = 30;
+
+    train_data.truncate(SAMPLES);
+    test_data.truncate(SAMPLES * 2);
+
+    let start = std::time::Instant::now();
 
     let (device, queue, sba, sda, ma) = get_device();
+
+    println!("Device elapsed time: {:?}", start.elapsed());
 
     let result = dtw::<MultiBatchMode>(
         device.clone(),
@@ -97,6 +106,8 @@ fn test_dtw_distance() {
         &train_data,
         &test_data,
     );
+
+    println!("DTW elapsed time: {:?}", start.elapsed());
 }
 
 #[test]

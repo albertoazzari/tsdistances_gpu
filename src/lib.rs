@@ -24,6 +24,7 @@ pub mod cpu {
     use crate::warps::diamond_partitioning_gpu;
     use crate::warps::GpuBatchMode;
     use crate::Float;
+    use crate::utils::SubBuffersAllocator;
     use std::sync::Arc;
 
     use vulkano::buffer::allocator::SubbufferAllocator;
@@ -38,7 +39,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
         gap_penalty: Float,
@@ -63,7 +64,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
         epsilon: Float,
@@ -91,7 +92,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
@@ -114,7 +115,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
         weights: &[Float],
@@ -139,7 +140,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
@@ -161,7 +162,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
         stiffness: Float,
@@ -188,7 +189,7 @@ pub mod cpu {
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
-        sa: Arc<SubbufferAllocator>,
+        sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
         w: Float,

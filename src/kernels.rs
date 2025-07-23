@@ -45,7 +45,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, Float};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, Float, utils::SubBuffersAllocator};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -64,13 +64,14 @@ macro_rules! warp_kernel_spec {
 
                         type KernelParams = KernelParams;
 
-                        fn build_kernel_params(
+                        fn build_kernel_params<L>(
                             &self,
-                            _allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
+                            _allocator: SubBuffersAllocator,
+                            _command_buffer: &mut AutoCommandBufferBuilder<L>,
                             max_work_group_size: usize,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, max_work_group_size))?
+                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, _command_buffer, max_work_group_size))?
                             }
                         }
 
@@ -176,7 +177,7 @@ macro_rules! warp_kernel_spec {
                                 .physical_device()
                                 .properties()
                                 .max_compute_work_group_size[0];
-                            
+
                             // print kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride
                             println!(
                                 "Dispatching kernel: {}, padded_a_len: {}, padded_b_len: {}, threads_count: {}, a_count: {}, b_count: {}, diagonal_stride: {}, max_threads_x: {}, threads_count: {}",
@@ -453,6 +454,7 @@ pub mod kernel_trait {
     use vulkano::device::Device;
 
     use crate::Float;
+    use crate::utils::SubBuffersAllocator;
 
     pub struct BatchInfo {
         pub padded_a_len: u64,
@@ -465,9 +467,10 @@ pub mod kernel_trait {
     pub trait GpuKernelImpl {
         type KernelParams;
 
-        fn build_kernel_params(
+        fn build_kernel_params<L>(
             &self,
-            allocator: Arc<vulkano::buffer::allocator::SubbufferAllocator>,
+            allocator: SubBuffersAllocator,
+            command_buffer: &mut AutoCommandBufferBuilder<L>,
             max_work_group_size: usize,
         ) -> Self::KernelParams;
 

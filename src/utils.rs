@@ -1,20 +1,25 @@
 use std::sync::{Arc, LazyLock};
 
 use vulkano::{
+    VulkanLibrary,
     buffer::{
-        allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
         BufferContents, BufferUsage, Subbuffer,
+        allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
     },
-    command_buffer::allocator::StandardCommandBufferAllocator,
+    command_buffer::{
+        AutoCommandBufferBuilder, CommandBuffer, CopyBufferInfo,
+        allocator::StandardCommandBufferAllocator,
+    },
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{
-        physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures,
-        Queue, QueueCreateInfo, QueueFlags,
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo,
+        QueueFlags, physical::PhysicalDeviceType,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     memory::allocator::{MemoryTypeFilter, StandardMemoryAllocator},
-    VulkanLibrary,
 };
+
+use crate::cpu;
 
 #[macro_export]
 macro_rules! assert_eq_with_tol {
@@ -29,6 +34,12 @@ macro_rules! assert_eq_with_tol {
     ($a:expr, $b:expr) => {
         assert_eq_with_tol!($a, $b, 1e-6);
     };
+}
+
+#[derive(Clone)]
+pub struct SubBuffersAllocator {
+    gpu: Arc<SubbufferAllocator>,
+    cpu: Arc<SubbufferAllocator>,
 }
 
 type CachedCore = (
@@ -112,42 +123,86 @@ pub fn get_device() -> (
     Arc<Queue>,
     Arc<StandardCommandBufferAllocator>,
     Arc<StandardDescriptorSetAllocator>,
-    Arc<SubbufferAllocator>,
+    SubBuffersAllocator,
 ) {
     let (device, queue, command_buffer_allocator, descriptor_set_allocator, memory_allocator) =
         DEVICE_CORE.clone();
 
-    let buffer_allocator = Arc::new(SubbufferAllocator::new(
-        memory_allocator,
+    let gpu_buffer_allocator = Arc::new(SubbufferAllocator::new(
+        memory_allocator.clone(),
         SubbufferAllocatorCreateInfo {
             buffer_usage: BufferUsage::TRANSFER_DST
                 | BufferUsage::STORAGE_BUFFER
                 | BufferUsage::TRANSFER_SRC,
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
             ..Default::default()
         },
     ));
+
+    let cpu_buffer_allocator = Arc::new(SubbufferAllocator::new(
+        memory_allocator,
+        SubbufferAllocatorCreateInfo {
+            buffer_usage: BufferUsage::TRANSFER_DST | BufferUsage::TRANSFER_SRC,
+            memory_type_filter: MemoryTypeFilter::PREFER_HOST,
+            ..Default::default()
+        },
+    ));
+
     (
         device,
         queue,
         command_buffer_allocator,
         descriptor_set_allocator,
-        buffer_allocator,
+        SubBuffersAllocator {
+            gpu: gpu_buffer_allocator,
+            cpu: cpu_buffer_allocator,
+        },
     )
 }
 
-pub fn move_gpu<T: BufferContents + Copy>(
+pub fn move_gpu<T: BufferContents + Copy, L>(
     data: &[T],
-    subbuffer_allocator: &Arc<SubbufferAllocator>,
+    subbuffer_allocator: &SubBuffersAllocator,
+    command_buffer: &mut AutoCommandBufferBuilder<L>,
     alignment: usize,
 ) -> Subbuffer<[T]> {
     let padded_len = data.len().div_ceil(alignment) * alignment;
 
-    let buffer = subbuffer_allocator
+    let cpu_buffer = subbuffer_allocator
+        .cpu
         .allocate_slice(padded_len as u64)
         .unwrap();
-    buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
-    buffer
+    cpu_buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
+
+    let gpu_buffer = subbuffer_allocator
+        .gpu
+        .allocate_slice(padded_len as u64)
+        .unwrap();
+
+    command_buffer
+        .copy_buffer(CopyBufferInfo::buffers(
+            cpu_buffer.clone(),
+            gpu_buffer.clone(),
+        ))
+        .unwrap();
+
+    gpu_buffer
+}
+
+pub fn move_cpu<T: BufferContents + Copy, L>(
+    subbuffer_allocator: &SubBuffersAllocator,
+    gpu_buffer: &Subbuffer<[T]>,
+    command_buffer: &mut AutoCommandBufferBuilder<L>,
+) -> Subbuffer<[T]> {
+    let cpu_buffer = subbuffer_allocator
+        .cpu
+        .allocate_slice(gpu_buffer.len() as u64)
+        .unwrap();
+    command_buffer
+        .copy_buffer(CopyBufferInfo::buffers(
+            gpu_buffer.clone(),
+            cpu_buffer.clone(),
+        ))
+        .unwrap();
+    cpu_buffer
 }

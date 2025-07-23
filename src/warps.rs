@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use crate::{
-    kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
-    utils::move_gpu,
     Float,
+    kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
+    utils::{SubBuffersAllocator, move_cpu, move_gpu},
 };
 use vulkano::{
     buffer::allocator::SubbufferAllocator,
     command_buffer::{
-        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+        AutoCommandBufferBuilder, CommandBufferUsage, allocator::StandardCommandBufferAllocator,
     },
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{Device, Queue},
@@ -151,7 +151,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     queue: Arc<Queue>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
-    subbuffer_allocator: Arc<SubbufferAllocator>,
+    subbuffer_allocator: SubBuffersAllocator,
     params: G,
     a: M::InputType<'a>,
     b: M::InputType<'a>,
@@ -179,7 +179,9 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
 
     if max_a_batch_size == 0 {
-        println!("WARNING: The input is too large to be processed by the GPU, you could experience a runtime crash.");
+        println!(
+            "WARNING: The input is too large to be processed by the GPU, you could experience a runtime crash."
+        );
     }
 
     let a_batch_size = max_a_batch_size.min(M::get_samples_count(&a)).max(1);
@@ -226,7 +228,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     queue: Arc<Queue>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
-    buffer_allocator: Arc<SubbufferAllocator>,
+    buffer_allocator: SubBuffersAllocator,
     params: &G,
     max_subgroup_threads: usize,
     max_workgroup_size: usize,
@@ -266,10 +268,16 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     )
     .unwrap();
 
-    let a_gpu = move_gpu(&a, &buffer_allocator, max_workgroup_size);
-    let b_gpu = move_gpu(&b, &buffer_allocator, max_workgroup_size);
-    let mut diagonal = move_gpu(&diagonal, &buffer_allocator, max_workgroup_size);
-    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), max_workgroup_size);
+    let a_gpu = move_gpu(&a, &buffer_allocator, &mut builder, max_workgroup_size);
+    let b_gpu = move_gpu(&b, &buffer_allocator, &mut builder, max_workgroup_size);
+    let mut diagonal = move_gpu(
+        &diagonal,
+        &buffer_allocator,
+        &mut builder,
+        max_workgroup_size,
+    );
+    let kernel_params =
+        params.build_kernel_params(buffer_allocator.clone(), &mut builder, max_workgroup_size);
 
     // Number of kernel calls
     for i in 0..rows_count {
@@ -322,6 +330,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
 
+    let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
+
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
@@ -330,8 +340,8 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         .unwrap();
     future.wait(None).unwrap();
     let mut res = M::new_return(a_count, b_count);
-    let diagonal = diagonal.read().unwrap();
 
+    let diagonal = diagonal.read().unwrap();
     for i in 0..a_count {
         for j in 0..b_count {
             let diag_offset = (i * b_count + j) * diag_len;
