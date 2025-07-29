@@ -157,6 +157,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     b: M::InputType<'a>,
     init_val: Float,
 ) -> M::ReturnType {
+    let start_time = std::time::Instant::now();
     let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
         (b, a)
     } else {
@@ -219,6 +220,11 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         start += len;
     }
     let x = M::join_results(distances);
+    let elapsed = start_time.elapsed();
+    println!(
+        "GPU diamond partitioning took {} ms",
+        elapsed.as_millis()
+    );
     x
 }
 
@@ -333,15 +339,26 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
 
     let command_buffer = builder.build().unwrap();
+    let start_time = std::time::Instant::now();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
         .unwrap()
         .then_signal_fence_and_flush()
         .unwrap();
     future.wait(None).unwrap();
+    let elapsed = start_time.elapsed();
+    println!(
+        "GPU diamond partitioning command buffer execution took {} ms",
+        elapsed.as_millis()
+    );
     let mut res = M::new_return(a_count, b_count);
-
+    let start_time = std::time::Instant::now();
     let diagonal = diagonal.read().unwrap();
+    let elapsed = start_time.elapsed();
+    println!(
+        "GPU diamond partitioning data read took {} ms",
+        elapsed.as_millis()
+    );
     for i in 0..a_count {
         for j in 0..b_count {
             let diag_offset = (i * b_count + j) * diag_len;
