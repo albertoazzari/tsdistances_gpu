@@ -3,7 +3,7 @@
 
 pub mod kernels;
 pub type Float = f32;
-// pub type Float = f64;
+
 
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
@@ -27,7 +27,6 @@ pub mod cpu {
     use crate::utils::SubBuffersAllocator;
     use std::sync::Arc;
 
-    use vulkano::buffer::allocator::SubbufferAllocator;
     use vulkano::device::Queue;
     use vulkano::{
         command_buffer::allocator::StandardCommandBufferAllocator,

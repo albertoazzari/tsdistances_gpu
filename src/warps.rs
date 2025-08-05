@@ -6,7 +6,6 @@ use crate::{
     utils::{SubBuffersAllocator, move_cpu, move_gpu},
 };
 use vulkano::{
-    buffer::allocator::SubbufferAllocator,
     command_buffer::{
         AutoCommandBufferBuilder, CommandBufferUsage, allocator::StandardCommandBufferAllocator,
     },
