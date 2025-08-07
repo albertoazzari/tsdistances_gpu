@@ -194,9 +194,8 @@ pub fn move_cpu<T: BufferContents + Copy, L>(
     subbuffer_allocator: &SubBuffersAllocator,
     gpu_buffer: &Subbuffer<[T]>,
     command_buffer: &mut AutoCommandBufferBuilder<L>,
-) -> Subbuffer<[T]> 
-{
-    // Forse si puo ottimizzare perche ci dobbiamo spostare un valore solo 
+) -> Subbuffer<[T]> {
+    // Forse si puo ottimizzare perche ci dobbiamo spostare un valore solo
     let cpu_buffer = subbuffer_allocator
         .cpu
         .allocate_slice(gpu_buffer.len() as u64)

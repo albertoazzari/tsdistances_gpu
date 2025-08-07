@@ -4,7 +4,6 @@
 pub mod kernels;
 pub type Float = f32;
 
-
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
 #[cfg(not(target_arch = "spirv"))]
@@ -14,6 +13,7 @@ pub mod warps;
 
 #[cfg(not(target_arch = "spirv"))]
 pub mod cpu {
+    use crate::Float;
     use crate::kernels::adtw_distance::cpu::ADTWImpl;
     use crate::kernels::dtw_distance::cpu::DTWImpl;
     use crate::kernels::erp_distance::cpu::ERPImpl;
@@ -21,10 +21,9 @@ pub mod cpu {
     use crate::kernels::msm_distance::cpu::MSMImpl;
     use crate::kernels::twe_distance::cpu::TWEImpl;
     use crate::kernels::wdtw_distance::cpu::WDTWImpl;
-    use crate::warps::diamond_partitioning_gpu;
-    use crate::warps::GpuBatchMode;
-    use crate::Float;
     use crate::utils::SubBuffersAllocator;
+    use crate::warps::GpuBatchMode;
+    use crate::warps::diamond_partitioning_gpu;
     use std::sync::Arc;
 
     use vulkano::device::Queue;

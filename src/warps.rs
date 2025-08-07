@@ -7,11 +7,8 @@ use crate::{
 };
 use vulkano::{
     command_buffer::{
-        AutoCommandBufferBuilder, CommandBufferUsage, allocator::StandardCommandBufferAllocator,
-    },
-    descriptor_set::allocator::StandardDescriptorSetAllocator,
-    device::{Device, Queue},
-    sync::GpuFuture,
+        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage
+    }, descriptor_set::allocator::StandardDescriptorSetAllocator, device::{Device, Queue}, memory::MemoryHeapFlags, sync::GpuFuture
 };
 
 pub trait GpuBatchMode {
@@ -163,23 +160,36 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     };
 
     let properties = device.physical_device().properties();
-
+    let max_buffer_size = properties.max_storage_buffer_range as usize;
     let max_subgroup_size = properties.max_subgroup_size.unwrap() as usize;
     let max_workgroup_size = properties.max_compute_work_group_size[0] as usize;
+    let memory_properties = device.physical_device().memory_properties();
+    let total_device_memory = (memory_properties.memory_heaps
+        .iter()
+        .filter(|heap| heap.flags.contains(MemoryHeapFlags::DEVICE_LOCAL))
+        .map(|heap| heap.size)
+        .sum::<u64>() as f64 * 0.5) as usize;
 
-    let max_storage_buffer_range = properties.max_storage_buffer_range as usize;
-
+    // Estimate memory per batch
     let a_sample_length = M::get_sample_length(&a);
-
+    let b_sample_length = M::get_sample_length(&b);
     let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_size);
 
-    let max_buffer_size = max_storage_buffer_range as usize;
+    let bytes_per_f32 = std::mem::size_of::<f32>();
+    let a_buffer_size = a_sample_length * bytes_per_f32;
+    let b_buffer_size = b_sample_length * bytes_per_f32;
+    let diag_buffer_size = diag_len * bytes_per_f32;
 
-    let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
+    // Estimate total memory per time series computation
+    let memory_per_series = a_buffer_size + b_buffer_size + diag_buffer_size;
+
+    // Calculate max batch size based on total device memory
+    let max_a_batch_size = total_device_memory / memory_per_series;
+    let max_a_batch_size = max_a_batch_size.min(M::get_samples_count(&a)).max(1);
 
     if max_a_batch_size == 0 {
-        println!(
-            "WARNING: The input is too large to be processed by the GPU, you could experience a runtime crash."
+        panic!(
+            "ERROR: The input is too large to be processed by the GPU, you could experience a runtime crash."
         );
     }
 

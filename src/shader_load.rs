@@ -2,13 +2,13 @@ use std::sync::{Arc, OnceLock};
 
 use dashmap::DashMap;
 use vulkano::{
+    Validated, VulkanError,
     device::Device,
     pipeline::{
-        compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
         ComputePipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+        compute::ComputePipelineCreateInfo, layout::PipelineDescriptorSetLayoutCreateInfo,
     },
     shader::{ShaderModule, ShaderModuleCreateInfo},
-    Validated, VulkanError,
 };
 
 static SHADE_PIPELINES: OnceLock<DashMap<&'static str, Arc<ComputePipeline>>> = OnceLock::new();

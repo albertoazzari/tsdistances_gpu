@@ -1,9 +1,9 @@
 use csv::ReaderBuilder;
 use tsdistances_gpu::{
+    Float,
     cpu::{adtw, dtw, erp, lcss, msm, twe, wdtw},
     utils::get_device,
     warps::{GpuBatchMode, MultiBatchMode},
-    Float,
 };
 
 fn read_csv<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn std::error::Error>>
