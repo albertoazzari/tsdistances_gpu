@@ -160,36 +160,31 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     };
 
     let properties = device.physical_device().properties();
-    let max_buffer_size = properties.max_storage_buffer_range as usize;
+
     let max_subgroup_size = properties.max_subgroup_size.unwrap() as usize;
     let max_workgroup_size = properties.max_compute_work_group_size[0] as usize;
-    let memory_properties = device.physical_device().memory_properties();
-    let total_device_memory = (memory_properties.memory_heaps
-        .iter()
-        .filter(|heap| heap.flags.contains(MemoryHeapFlags::DEVICE_LOCAL))
-        .map(|heap| heap.size)
-        .sum::<u64>() as f64 * 0.5) as usize;
 
-    // Estimate memory per batch
+    let max_storage_buffer_range = properties.max_storage_buffer_range as usize;
+
     let a_sample_length = M::get_sample_length(&a);
-    let b_sample_length = M::get_sample_length(&b);
+    
     let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_size);
+    
+    let max_buffer_size = max_storage_buffer_range as usize / std::mem::size_of::<Float>();
+    println!("a_sample_length: {} and {}", a_sample_length, max_buffer_size);
+    assert!(a_sample_length < max_buffer_size,
+        "The time series length exceed the maximum buffer size."
+    );
+    assert!(
+        diag_len < max_buffer_size,
+        "The maximum buffer size is too small for the distance computation."
+    );
 
-    let bytes_per_f32 = std::mem::size_of::<f32>();
-    let a_buffer_size = a_sample_length * bytes_per_f32;
-    let b_buffer_size = b_sample_length * bytes_per_f32;
-    let diag_buffer_size = diag_len * bytes_per_f32;
-
-    // Estimate total memory per time series computation
-    let memory_per_series = a_buffer_size + b_buffer_size + diag_buffer_size;
-
-    // Calculate max batch size based on total device memory
-    let max_a_batch_size = total_device_memory / memory_per_series;
-    let max_a_batch_size = max_a_batch_size.min(M::get_samples_count(&a)).max(1);
+    let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
 
     if max_a_batch_size == 0 {
-        panic!(
-            "ERROR: The input is too large to be processed by the GPU, you could experience a runtime crash."
+        println!(
+            "WARNING: The input is too large to be processed by the GPU, you could experience a runtime crash."
         );
     }
 
