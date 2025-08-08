@@ -74,7 +74,7 @@ pub mod cpu {
             dsa,
             sa,
             LCSSImpl {
-                epsilon: epsilon as Float,
+                epsilon,
             },
             a,
             b,

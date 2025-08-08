@@ -171,7 +171,6 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_size);
     
     let max_buffer_size = max_storage_buffer_range as usize / std::mem::size_of::<Float>();
-    println!("a_sample_length: {} and {}", a_sample_length, max_buffer_size);
     assert!(a_sample_length < max_buffer_size,
         "The time series length exceed the maximum buffer size."
     );
