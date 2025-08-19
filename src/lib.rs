@@ -2,7 +2,6 @@
 #![allow(unexpected_cfgs)]
 
 pub mod kernels;
-pub type Float = f32;
 
 #[cfg(not(target_arch = "spirv"))]
 mod shader_load;
@@ -13,7 +12,6 @@ pub mod warps;
 
 #[cfg(not(target_arch = "spirv"))]
 pub mod cpu {
-    use crate::Float;
     use crate::kernels::adtw_distance::cpu::ADTWImpl;
     use crate::kernels::dtw_distance::cpu::DTWImpl;
     use crate::kernels::erp_distance::cpu::ERPImpl;
@@ -40,7 +38,7 @@ pub mod cpu {
         sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        gap_penalty: Float,
+        gap_penalty: f32,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -49,11 +47,11 @@ pub mod cpu {
             dsa,
             sa,
             ERPImpl {
-                gap_penalty: gap_penalty as Float,
+                gap_penalty: gap_penalty as f32,
             },
             a,
             b,
-            Float::INFINITY,
+            f32::INFINITY,
         )
     }
 
@@ -65,7 +63,7 @@ pub mod cpu {
         sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        epsilon: Float,
+        epsilon: f32,
     ) -> M::ReturnType {
         let similarity = diamond_partitioning_gpu::<_, M>(
             device,
@@ -81,7 +79,7 @@ pub mod cpu {
             0.0,
         );
         let min_len =
-            M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as Float;
+            M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as f32;
         M::apply_fn(similarity, |s| 1.0 - s / min_len)
     }
 
@@ -94,6 +92,7 @@ pub mod cpu {
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
+        let start_time = std::time::Instant::now();
         let res = diamond_partitioning_gpu::<_, M>(
             device,
             queue,
@@ -103,7 +102,11 @@ pub mod cpu {
             DTWImpl {},
             a,
             b,
-            Float::INFINITY,
+            f32::INFINITY,
+        );
+        println!(
+            "GPU - DTW distance computed in {} ms",
+            start_time.elapsed().as_millis()
         );
         res
     }
@@ -116,9 +119,8 @@ pub mod cpu {
         sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        weights: &[Float],
+        weights: &[f32],
     ) -> M::ReturnType {
-        let weights = weights.iter().map(|x| *x as Float).collect::<Vec<Float>>();
 
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -126,10 +128,10 @@ pub mod cpu {
             sba,
             dsa,
             sa,
-            WDTWImpl { weights: weights },
+            WDTWImpl { weights: weights.to_vec() },
             a,
             b,
-            Float::INFINITY,
+            f32::INFINITY,
         )
     }
 
@@ -151,7 +153,7 @@ pub mod cpu {
             MSMImpl {},
             a,
             b,
-            Float::INFINITY,
+            f32::INFINITY,
         )
     }
 
@@ -163,8 +165,8 @@ pub mod cpu {
         sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        stiffness: Float,
-        penalty: Float,
+        stiffness: f32,
+        penalty: f32,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -173,12 +175,12 @@ pub mod cpu {
             dsa,
             sa,
             TWEImpl {
-                stiffness: stiffness as Float,
-                penalty: penalty as Float,
+                stiffness: stiffness as f32,
+                penalty: penalty as f32,
             },
             a,
             b,
-            Float::INFINITY,
+            f32::INFINITY,
         )
     }
 
@@ -190,7 +192,7 @@ pub mod cpu {
         sa: SubBuffersAllocator,
         a: M::InputType<'a>,
         b: M::InputType<'a>,
-        w: Float,
+        w: f32,
     ) -> M::ReturnType {
         diamond_partitioning_gpu::<_, M>(
             device,
@@ -198,10 +200,10 @@ pub mod cpu {
             sba,
             dsa,
             sa,
-            ADTWImpl { w: w as Float },
+            ADTWImpl { w: w as f32 },
             a,
             b,
-            Float::INFINITY,
+            f32::INFINITY,
         )
     }
 }

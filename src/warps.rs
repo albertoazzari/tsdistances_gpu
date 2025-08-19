@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::{
-    Float,
     kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
     utils::{SubBuffersAllocator, move_cpu, move_gpu},
 };
@@ -19,8 +18,8 @@ pub trait GpuBatchMode {
 
     fn get_samples_count(input: &Self::InputType<'_>) -> usize;
     fn new_return(alen: usize, blen: usize) -> Self::ReturnType;
-    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Float);
-    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float>;
+    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: f32);
+    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<f32>;
     fn get_sample_length(input: &Self::InputType<'_>) -> usize;
     fn get_padded_len(sample_length: usize, pad_stride: usize) -> usize {
         next_multiple_of_n(sample_length, pad_stride)
@@ -30,7 +29,7 @@ pub trait GpuBatchMode {
         start: usize,
         len: usize,
     ) -> Self::InputType<'a>;
-    fn apply_fn(ret: Self::ReturnType, func: impl Fn(Float) -> Float) -> Self::ReturnType;
+    fn apply_fn(ret: Self::ReturnType, func: impl Fn(f32) -> f32) -> Self::ReturnType;
     fn join_results(results: Vec<Self::ReturnType>) -> Self::ReturnType;
 }
 
@@ -38,8 +37,8 @@ pub struct SingleBatchMode;
 impl GpuBatchMode for SingleBatchMode {
     const IS_BATCH: bool = false;
 
-    type ReturnType = Float;
-    type InputType<'a> = &'a [Float];
+    type ReturnType = f32;
+    type InputType<'a> = &'a [f32];
 
     fn get_samples_count(_input: &Self::InputType<'_>) -> usize {
         1
@@ -49,15 +48,15 @@ impl GpuBatchMode for SingleBatchMode {
         0.0
     }
 
-    fn set_return(ret: &mut Self::ReturnType, _: usize, _: usize, value: Float) {
-        *ret = value as Float;
+    fn set_return(ret: &mut Self::ReturnType, _: usize, _: usize, value: f32) {
+        *ret = value;
     }
 
-    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float> {
+    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<f32> {
         let padded_len = Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
         let mut padded = vec![0.0; padded_len];
         for (padded, input) in padded.iter_mut().zip(input.iter()) {
-            *padded = *input as Float;
+            *padded = *input;
         }
 
         padded
@@ -67,7 +66,7 @@ impl GpuBatchMode for SingleBatchMode {
         input.len()
     }
 
-    fn apply_fn(ret: Self::ReturnType, func: impl Fn(Float) -> Float) -> Self::ReturnType {
+    fn apply_fn(ret: Self::ReturnType, func: impl Fn(f32) -> f32) -> Self::ReturnType {
         func(ret)
     }
 
@@ -84,9 +83,9 @@ pub struct MultiBatchMode;
 impl GpuBatchMode for MultiBatchMode {
     const IS_BATCH: bool = true;
 
-    type ReturnType = Vec<Vec<Float>>;
+    type ReturnType = Vec<Vec<f32>>;
 
-    type InputType<'a> = &'a [Vec<Float>];
+    type InputType<'a> = &'a [Vec<f32>];
 
     fn get_samples_count(input: &Self::InputType<'_>) -> usize {
         input.len()
@@ -96,17 +95,17 @@ impl GpuBatchMode for MultiBatchMode {
         vec![vec![0.0; blen]; alen]
     }
 
-    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: Float) {
-        ret[i][j] = value as Float;
+    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: f32) {
+        ret[i][j] = value;
     }
 
-    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<Float> {
+    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<f32> {
         let single_padded_len =
             Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
         let mut padded = vec![0.0; single_padded_len * input.len()];
         for i in 0..input.len() {
             for j in 0..input[i].len() {
-                padded[i * single_padded_len + j] = input[i][j] as Float;
+                padded[i * single_padded_len + j] = input[i][j];
             }
         }
         padded
@@ -116,7 +115,7 @@ impl GpuBatchMode for MultiBatchMode {
         input.first().map_or(0, |x| x.len())
     }
 
-    fn apply_fn(mut ret: Self::ReturnType, func: impl Fn(Float) -> Float) -> Self::ReturnType {
+    fn apply_fn(mut ret: Self::ReturnType, func: impl Fn(f32) -> f32) -> Self::ReturnType {
         for i in 0..ret.len() {
             for j in 0..ret[i].len() {
                 ret[i][j] = func(ret[i][j]);
@@ -151,7 +150,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     params: G,
     a: M::InputType<'a>,
     b: M::InputType<'a>,
-    init_val: Float,
+    init_val: f32,
 ) -> M::ReturnType {
     let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
         (b, a)
@@ -170,22 +169,12 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
     
     let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_size);
     
-    let max_buffer_size = max_storage_buffer_range as usize / std::mem::size_of::<Float>();
+    let max_buffer_size = max_storage_buffer_range as usize / std::mem::size_of::<f32>();
     assert!(a_sample_length < max_buffer_size,
         "The time series length exceed the maximum buffer size."
     );
-    assert!(
-        diag_len < max_buffer_size,
-        "The maximum buffer size is too small for the distance computation."
-    );
 
     let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
-
-    if max_a_batch_size == 0 {
-        println!(
-            "WARNING: The input is too large to be processed by the GPU, you could experience a runtime crash."
-        );
-    }
 
     let a_batch_size = max_a_batch_size.min(M::get_samples_count(&a)).max(1);
     let mut start = 0;
@@ -237,11 +226,11 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     max_workgroup_size: usize,
     a_sample_len: usize,
     b_sample_len: usize,
-    a: Vec<Float>,
-    b: Vec<Float>,
+    a: Vec<f32>,
+    b: Vec<f32>,
     a_count: usize,
     b_count: usize,
-    init_val: Float,
+    init_val: f32,
     is_batch: bool,
 ) -> M::ReturnType {
     let padded_a_len = M::get_padded_len(a_sample_len, max_subgroup_threads);
@@ -334,6 +323,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
 
+    let start_time = std::time::Instant::now();
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
@@ -341,6 +331,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         .then_signal_fence_and_flush()
         .unwrap();
     future.wait(None).unwrap();
+    println!(
+        "GPU - Command Buffer executed in {} ms",
+        start_time.elapsed().as_millis()
+    );
     let mut res = M::new_return(a_count, b_count);
     let diagonal = diagonal.read().unwrap();
     for i in 0..a_count {

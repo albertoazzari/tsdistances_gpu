@@ -1,6 +1,5 @@
 use csv::ReaderBuilder;
 use tsdistances_gpu::{
-    Float,
     cpu::{adtw, dtw, erp, lcss, msm, twe, wdtw},
     utils::get_device,
     warps::{GpuBatchMode, MultiBatchMode},
@@ -27,21 +26,21 @@ where
     Ok(records)
 }
 
-const WEIGHT_MAX: Float = 1.0;
-fn dtw_weights(len: usize, g: Float) -> Vec<Float> {
+const WEIGHT_MAX: f32 = 1.0;
+fn dtw_weights(len: usize, g: f32) -> Vec<f32> {
     let mut weights = vec![0.0; len];
-    let half_len = len as Float / 2.0;
-    let e = std::f64::consts::E as Float;
+    let half_len = len as f32 / 2.0;
+    let e = std::f64::consts::E as f32;
     for i in 0..len {
-        weights[i] = WEIGHT_MAX / (1.0 + e.powf(-g * (i as Float - half_len)));
+        weights[i] = WEIGHT_MAX / (1.0 + e.powf(-g * (i as f32 - half_len)));
     }
     weights
 }
 
 #[test]
 fn test_erp_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
@@ -61,8 +60,8 @@ fn test_erp_distance() {
 
 #[test]
 fn test_lcss_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
     let epsilon = 1.0;
@@ -83,13 +82,8 @@ fn test_lcss_distance() {
 
 #[test]
 fn test_dtw_distance() {
-    let mut train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let mut test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
-
-    const SAMPLES: usize = 30;
-
-    train_data.truncate(SAMPLES);
-    test_data.truncate(SAMPLES * 2);
+    let mut train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let mut test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let start = std::time::Instant::now();
 
@@ -112,8 +106,8 @@ fn test_dtw_distance() {
 
 #[test]
 fn test_wdtw_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
     let g = 0.05;
@@ -133,8 +127,8 @@ fn test_wdtw_distance() {
 
 #[test]
 fn test_adtw_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
@@ -154,8 +148,8 @@ fn test_adtw_distance() {
 
 #[test]
 fn test_msm_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
@@ -172,8 +166,8 @@ fn test_msm_distance() {
 
 #[test]
 fn test_twe_distance() {
-    let train_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<Float>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
