@@ -134,7 +134,7 @@ pub fn get_device() -> (
             buffer_usage: BufferUsage::TRANSFER_DST
                 | BufferUsage::STORAGE_BUFFER
                 | BufferUsage::TRANSFER_SRC,
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_RANDOM_ACCESS,
             ..Default::default()
         },
     ));
@@ -169,23 +169,24 @@ pub fn move_gpu<T: BufferContents + Copy, L>(
 ) -> Subbuffer<[T]> {
     let padded_len = data.len().div_ceil(alignment) * alignment;
 
-    let cpu_buffer = subbuffer_allocator
-        .cpu
-        .allocate_slice(padded_len as u64)
-        .unwrap();
-    cpu_buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
+    // let cpu_buffer = subbuffer_allocator
+    //     .cpu
+    //     .allocate_slice(padded_len as u64)
+    //     .unwrap();
+    // cpu_buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
 
     let gpu_buffer = subbuffer_allocator
         .gpu
         .allocate_slice(padded_len as u64)
         .unwrap();
+    gpu_buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
 
-    command_buffer
-        .copy_buffer(CopyBufferInfo::buffers(
-            cpu_buffer.clone(),
-            gpu_buffer.clone(),
-        ))
-        .unwrap();
+    // command_buffer
+    //     .copy_buffer(CopyBufferInfo::buffers(
+    //         cpu_buffer.clone(),
+    //         gpu_buffer.clone(),
+    //     ))
+    //     .unwrap();
 
     gpu_buffer
 }

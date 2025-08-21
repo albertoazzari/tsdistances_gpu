@@ -5,13 +5,14 @@ use tsdistances_gpu::{
     warps::{GpuBatchMode, MultiBatchMode},
 };
 
-fn read_csv<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn std::error::Error>>
+fn read_txt<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn std::error::Error>>
 where
     T: std::str::FromStr,
     T::Err: 'static + std::error::Error,
 {
     let mut reader = ReaderBuilder::new()
         .has_headers(false)
+        .delimiter(if file_path.ends_with(".tsv") { b'\t' } else { b',' })
         .from_path(file_path)?;
 
     let mut records = Vec::new();
@@ -39,8 +40,8 @@ fn dtw_weights(len: usize, g: f32) -> Vec<f32> {
 
 #[test]
 fn test_erp_distance() {
-    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
@@ -60,8 +61,8 @@ fn test_erp_distance() {
 
 #[test]
 fn test_lcss_distance() {
-    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
     let epsilon = 1.0;
@@ -82,8 +83,8 @@ fn test_lcss_distance() {
 
 #[test]
 fn test_dtw_distance() {
-    let mut train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let mut test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TRAIN.tsv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TEST.tsv").unwrap();
 
     let start = std::time::Instant::now();
 
@@ -101,13 +102,23 @@ fn test_dtw_distance() {
         &test_data,
     );
 
+    
     println!("DTW elapsed time: {:?}", start.elapsed());
+    let results_cpu: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_DTW_RESULTS.csv").unwrap();
+
+    // assert eq with a 5% difference on the differences compared to the value
+    for (i, row) in results_cpu.iter().enumerate() {
+        for (j, &value) in row.iter().enumerate() {
+            let diff = (value - result[i][j]).abs();
+            assert!(diff / value < 0.05, "GPU DTW result differs from CPU result by more than 5%\n diff: {}, cpu: {}, gpu: {}", diff, value, result[i][j]);
+        }
+    }
 }
 
 #[test]
 fn test_wdtw_distance() {
-    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
     let g = 0.05;
@@ -127,8 +138,8 @@ fn test_wdtw_distance() {
 
 #[test]
 fn test_adtw_distance() {
-    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
@@ -148,8 +159,8 @@ fn test_adtw_distance() {
 
 #[test]
 fn test_msm_distance() {
-    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
@@ -166,8 +177,8 @@ fn test_msm_distance() {
 
 #[test]
 fn test_twe_distance() {
-    let train_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_csv("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 

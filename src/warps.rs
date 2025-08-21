@@ -162,54 +162,32 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     let max_subgroup_size = properties.max_subgroup_size.unwrap() as usize;
     let max_workgroup_size = properties.max_compute_work_group_size[0] as usize;
-
-    let max_storage_buffer_range = properties.max_storage_buffer_range as usize;
-
-    let a_sample_length = M::get_sample_length(&a);
     
-    let diag_len = compute_diag_len::<M>(a_sample_length, max_subgroup_size);
-    
-    let max_buffer_size = max_storage_buffer_range as usize / std::mem::size_of::<f32>();
-    assert!(a_sample_length < max_buffer_size,
-        "The time series length exceed the maximum buffer size."
-    );
-
-    let max_a_batch_size = max_buffer_size / (diag_len * M::get_samples_count(&b));
-
-    let a_batch_size = max_a_batch_size.min(M::get_samples_count(&a)).max(1);
-    let mut start = 0;
-    let a_len = M::get_samples_count(&a);
     let mut distances = Vec::new();
+    let a_padded = M::build_padded(&a, max_subgroup_size);
+    let b_padded = M::build_padded(&b, max_subgroup_size);
 
-    while start < a_len {
-        let len = a_batch_size.min(a_len - start);
-        let a = M::get_subslice(&a, start, len);
-        let a_padded = M::build_padded(&a, max_subgroup_size);
-        let b_padded = M::build_padded(&b, max_subgroup_size);
+    let a_count = M::get_samples_count(&a);
+    let b_count = M::get_samples_count(&b);
 
-        let a_count = len;
-        let b_count = M::get_samples_count(&b);
-
-        distances.push(diamond_partitioning_gpu_::<G, M>(
-            device.clone(),
-            queue.clone(),
-            command_buffer_allocator.clone(),
-            descriptor_set_allocator.clone(),
-            subbuffer_allocator.clone(),
-            &params,
-            max_subgroup_size,
-            max_workgroup_size,
-            M::get_sample_length(&a),
-            M::get_sample_length(&b),
-            a_padded,
-            b_padded,
-            a_count,
-            b_count,
-            init_val,
-            M::IS_BATCH,
-        ));
-        start += len;
-    }
+    distances.push(diamond_partitioning_gpu_::<G, M>(
+        device.clone(),
+        queue.clone(),
+        command_buffer_allocator.clone(),
+        descriptor_set_allocator.clone(),
+        subbuffer_allocator.clone(),
+        &params,
+        max_subgroup_size,
+        max_workgroup_size,
+        M::get_sample_length(&a),
+        M::get_sample_length(&b),
+        a_padded,
+        b_padded,
+        a_count,
+        b_count,
+        init_val,
+        M::IS_BATCH,
+    ));
     let x = M::join_results(distances);
     x
 }
@@ -321,7 +299,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
 
-    let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
+    // let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
 
     let start_time = std::time::Instant::now();
     let command_buffer = builder.build().unwrap();
