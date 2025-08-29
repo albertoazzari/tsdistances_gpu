@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
-    utils::{SubBuffersAllocator, move_cpu, move_gpu},
+    utils::{SubBuffersAllocator, move_diag, move_ts},
 };
 use vulkano::{
     command_buffer::{
@@ -138,6 +138,7 @@ impl GpuBatchMode for MultiBatchMode {
 }
 
 fn compute_diag_len<M: GpuBatchMode>(sample_length: usize, pad_stride: usize) -> usize {
+    // ma ha senso paddare ad un multiplo di 32 e poi andare alla next power of two? sec me no
     2 * (M::get_padded_len(sample_length, pad_stride) + 1).next_power_of_two()
 }
 
@@ -158,10 +159,17 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         (a, b)
     };
 
-    let properties = device.physical_device().properties();
-
+    let pdevice = device.physical_device();
+    let properties = pdevice.properties();
     let max_subgroup_size = properties.max_subgroup_size.unwrap() as usize;
     let max_workgroup_size = properties.max_compute_work_group_size[0] as usize;
+    let max_storage_buffer_size = properties.max_storage_buffer_range as usize;
+    let device_mem = pdevice.memory_properties().memory_heaps
+        .iter()
+        .filter(|heap| heap.flags.contains(MemoryHeapFlags::DEVICE_LOCAL))
+        .map(|heap| heap.size)
+        .sum::<u64>() as usize;
+    
     
     let mut distances = Vec::new();
     let a_padded = M::build_padded(&a, max_subgroup_size);
@@ -169,6 +177,15 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     let a_count = M::get_samples_count(&a);
     let b_count = M::get_samples_count(&b);
+
+    let ts_len = M::get_sample_length(&a);
+    let diag_len = 2 * (ts_len + 1).next_power_of_two();
+
+    // let chunk_size_mem = total_device_memory / (2*ts_len + diag_len);
+    let chunk_size_buf = max_storage_buffer_size / (diag_len * std::mem::size_of::<f32>());
+    // let chunk_size = chunk_size_buf.min(chunk_size_mem);
+
+    // panic!("chunk_size_buf = {chunk_size_buf}, max_storage_buffer_size = {max_storage_buffer_size}, diag_len = {diag_len}, device_mem = {device_mem}, sizeof(f32) = {}", std::mem::size_of::<f32>());
 
     distances.push(diamond_partitioning_gpu_::<G, M>(
         device.clone(),
@@ -222,6 +239,12 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         diagonal[i * diag_len] = 0.0;
     }
 
+    // let mut diagonal = vec![init_val; std::cmp::max(a_count, b_count) * diag_len];
+
+    // for i in 0..std::cmp::max(a_count, b_count) {
+    //     diagonal[i * diag_len] = 0.0;
+    // }
+
     let a_diamonds = padded_a_len.div_ceil(max_subgroup_threads);
     let b_diamonds = padded_b_len.div_ceil(max_subgroup_threads);
     let rows_count = (padded_a_len + padded_b_len).div_ceil(max_subgroup_threads) - 1;
@@ -235,11 +258,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         command_buffer_allocator.clone(),
         queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit,
-    )
-    .unwrap();
-    let a_gpu = move_gpu(&a, &buffer_allocator, &mut builder, max_workgroup_size);
-    let b_gpu = move_gpu(&b, &buffer_allocator, &mut builder, max_workgroup_size);
-    let mut diagonal = move_gpu(
+    ).unwrap();
+    let a_gpu = move_ts(&a, &buffer_allocator, &mut builder, max_workgroup_size);
+    let b_gpu = move_ts(&b, &buffer_allocator, &mut builder, max_workgroup_size);
+    let mut diagonal = move_diag(
         &diagonal,
         &buffer_allocator,
         &mut builder,
@@ -301,7 +323,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
 
     // let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
 
-    let start_time = std::time::Instant::now();
+    // let start_time = std::time::Instant::now();
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
@@ -309,22 +331,31 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         .then_signal_fence_and_flush()
         .unwrap();
     future.wait(None).unwrap();
-    println!(
-        "GPU - Command Buffer executed in {} ms",
-        start_time.elapsed().as_millis()
-    );
+    // println!(
+    //     "GPU - Command Buffer executed in {} ms",
+    //     start_time.elapsed().as_millis()
+    // );
     let mut res = M::new_return(a_count, b_count);
     let diagonal = diagonal.read().unwrap();
-    for i in 0..a_count {
-        for j in 0..b_count {
-            let diag_offset = (i * b_count + j) * diag_len;
-            M::set_return(
-                &mut res,
-                i,
-                j,
-                diagonal[diag_offset + ((cx as usize) & (diag_len - 1))],
-            );
-        }
+    // for i in 0..a_count {
+    //     for j in 0..b_count {
+    //         let diag_offset = (i * b_count + j) * diag_len;
+    //         M::set_return(
+    //             &mut res,
+    //             i,
+    //             j,
+    //             diagonal[diag_offset + ((cx as usize) & (diag_len - 1))],
+    //         );
+    //     }
+    // }
+    for i in 0..std::cmp::max(a_count, b_count) {
+        let diag_offset = i  * diag_len;
+        M::set_return(
+            &mut res,
+            i,
+            diag_offset & (diag_len - 1),
+            diagonal[diag_offset ],//+ ((cx as usize) &)],
+        );
     }
     res
 }

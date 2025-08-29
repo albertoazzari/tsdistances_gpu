@@ -70,7 +70,7 @@ macro_rules! warp_kernel_spec {
                             max_work_group_size: usize,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, _command_buffer, max_work_group_size))?
+                                $($vec5: crate::utils::move_ts(&self.$vec5, &_allocator, _command_buffer, max_work_group_size))?
                             }
                         }
 
