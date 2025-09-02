@@ -92,7 +92,7 @@ pub mod cpu {
         a: M::InputType<'a>,
         b: M::InputType<'a>,
     ) -> M::ReturnType {
-        let start_time = std::time::Instant::now();
+        // let start_time = std::time::Instant::now();
         let res = diamond_partitioning_gpu::<_, M>(
             device,
             queue,
@@ -104,10 +104,10 @@ pub mod cpu {
             b,
             f32::INFINITY,
         );
-        println!(
-            "GPU - DTW distance computed in {} ms",
-            start_time.elapsed().as_millis()
-        );
+        // println!(
+        //     "GPU - DTW distance computed in {} ms",
+        //     start_time.elapsed().as_millis()
+        // );
         res
     }
 

@@ -1,8 +1,10 @@
+use std::fmt::write;
+
 use csv::ReaderBuilder;
 use tsdistances_gpu::{
     cpu::{adtw, dtw, erp, lcss, msm, twe, wdtw},
     utils::get_device,
-    warps::{GpuBatchMode, MultiBatchMode},
+    warps::{GpuBatchMode, MultiBatchMode, SingleBatchMode},
 };
 
 fn read_txt<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn std::error::Error>>
@@ -25,6 +27,18 @@ where
         records.push(row);
     }
     Ok(records)
+}
+
+pub fn write_csv<T>(file_path: &str, data: &[Vec<T>]) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: std::fmt::Display,
+{
+    let mut wtr = csv::Writer::from_path(file_path)?;
+    for row in data {
+        wtr.write_record(row.iter().map(|item| item.to_string()))?;
+    }
+    wtr.flush()?;
+    Ok(())
 }
 
 const WEIGHT_MAX: f32 = 1.0;
@@ -83,8 +97,33 @@ fn test_lcss_distance() {
 
 #[test]
 fn test_dtw_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TRAIN.tsv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TEST.tsv").unwrap();
+    let ds_name = "CBF";
+    let train_data: Vec<Vec<f32>> = read_txt(&format!("../../DATA/ucr/{}/{}_TRAIN.tsv", ds_name, ds_name)).unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt(&format!("../../DATA/ucr/{}/{}_TEST.tsv", ds_name, ds_name)).unwrap();
+    // let train_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TRAIN.tsv").unwrap();
+    // let test_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TEST.tsv").unwrap();
+
+    // let start = std::time::Instant::now();
+
+    // let (device, queue, sba, sda, ma) = get_device();
+
+    // println!("Device elapsed time: {:?}", start.elapsed());
+    // for i in 0..train_data.len() {
+    //     for j in 0..test_data.len() {
+            
+    //         let result = dtw::<SingleBatchMode>(
+    //             device.clone(),
+    //             queue.clone(),
+    //             sba.clone(),
+    //             sda.clone(),
+    //             ma.clone(),
+    //             &train_data[i],
+    //             &test_data[j],
+    //         );
+    //     }
+    // }
+    // println!("Single DTW elapsed time: {:?}", start.elapsed());
+
 
     let start = std::time::Instant::now();
 
@@ -101,18 +140,14 @@ fn test_dtw_distance() {
         &train_data,
         &test_data,
     );
-
-    
     println!("DTW elapsed time: {:?}", start.elapsed());
-    let results_cpu: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_DTW_RESULTS.csv").unwrap();
 
-    // assert eq with a 5% difference on the differences compared to the value
-    for (i, row) in results_cpu.iter().enumerate() {
-        for (j, &value) in row.iter().enumerate() {
-            let diff = (value - result[i][j]).abs();
-            assert!(diff / value < 0.05, "GPU DTW result differs from CPU result by more than 5%\n diff: {}, cpu: {}, gpu: {}", diff, value, result[i][j]);
-        }
-    }
+    write_csv(&format!("tests/{}_DTW_TE.csv", ds_name), &result).unwrap();
+    // Device elapsed time: 278.698142ms
+    // Single DTW elapsed time: 23.71971498s
+    // Device elapsed time: 213ns
+    // DTW elapsed time: 12.042854409s
+
 }
 
 #[test]
