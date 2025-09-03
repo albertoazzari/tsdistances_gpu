@@ -44,7 +44,7 @@ macro_rules! warp_kernel_spec {
                     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
                     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
                     use vulkano::device::Device;
-                    use crate::{kernels::kernel_trait::{GpuKernelImpl, BatchInfo}, utils::SubBuffersAllocator};
+                    use crate::{kernels::kernel_trait::{GpuKernelImpl}, utils::SubBuffersAllocator};
                     use vulkano::pipeline::{Pipeline, PipelineBindPoint};
 
                     pub struct $impl_struct {
@@ -63,14 +63,13 @@ macro_rules! warp_kernel_spec {
 
                         type KernelParams = KernelParams;
 
-                        fn build_kernel_params<L>(
+                        fn build_kernel_params(
                             &self,
                             _allocator: SubBuffersAllocator,
-                            _command_buffer: &mut AutoCommandBufferBuilder<L>,
                             max_work_group_size: usize,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_ts(&self.$vec5, &_allocator, _command_buffer, max_work_group_size))?
+                                $($vec5: crate::utils::move_ts(&self.$vec5, &_allocator, max_work_group_size))?
                             }
                         }
 
@@ -81,7 +80,7 @@ macro_rules! warp_kernel_spec {
                             builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                             first_coord: i64,
                             row: u64,
-                            diamonds_count: u64,
+                            tile_count: u64,
                             a_start: u64,
                             b_start: u64,
                             a_len: u64,
@@ -90,36 +89,17 @@ macro_rules! warp_kernel_spec {
                             a: &Subbuffer<[f32]>,
                             b: &Subbuffer<[f32]>,
                             diagonal: &mut Subbuffer<[f32]>,
-                            batch_info: Option<BatchInfo>,
                             _kernel_params: &Self::KernelParams,
                         ) {
-                            let (kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride) = match batch_info {
-                                Some(batch_info) =>
-                                {
-                                    (
-                                        concat!("kernels::", stringify!($name), "::batch_call"),
-                                        batch_info.padded_a_len,
-                                        batch_info.padded_b_len,
-                                        (batch_info.a_count * batch_info.b_count * diamonds_count * max_subgroup_threads) as u32,
-                                        batch_info.a_count,
-                                        batch_info.b_count,
-                                        batch_info.diagonal_stride,
-                                    )
-                                },
-                                None => {
-                                    (
-                                        concat!("kernels::", stringify!($name), "::single_call"),
-                                        0u64,
-                                        0u64,
-                                        (diamonds_count * max_subgroup_threads) as u32,
-                                        1,
-                                        1,
-                                        (diamonds_count * max_subgroup_threads) as u64,
-                                    )
-                                },
-                            };
 
-                            let pipeline = crate::shader_load::get_shader_entry_pipeline(device.clone(), kernel_name);
+                            let shader_name = concat!("kernels::", stringify!($name), "::batch_call");
+                            let a_count = a.len() as u64 / a_len;
+                            let b_count = b.len() as u64 / b_len;
+                            let threads_count = (a_count * b_count * tile_count * max_subgroup_threads) as u32;
+                            let diag_len = diagonal.len() as u64 / (a_count * b_count);
+                            
+
+                            let pipeline = crate::shader_load::get_shader_entry_pipeline(device.clone(), shader_name);
                             let layout = &pipeline.layout().set_layouts()[0];
 
                             let set = DescriptorSet::new(
@@ -138,21 +118,20 @@ macro_rules! warp_kernel_spec {
                             let kernel_constants = super::KernelConstants {
                                     first_coord,
                                     row,
-                                    diamonds_count,
+                                    tile_count,
                                     a_start,
                                     b_start,
                                     a_len,
                                     b_len,
                                     a_count,
                                     b_count,
-                                    diagonal_stride,
+                                    diag_len,
                                     max_subgroup_threads,
                                     $(param1: self.$param1,)?
                                     $(param2: self.$param2,)?
                                     $(param3: self.$param3,)?
                                     $(param4: self.$param4,)?
-                                    padded_a_len,
-                                    padded_b_len,
+                                    _padding: 0,
                             };
 
                             builder
@@ -177,12 +156,6 @@ macro_rules! warp_kernel_spec {
                                 .properties()
                                 .max_compute_work_group_size[0];
 
-                            // print kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride
-                            // println!(
-                            //     "Dispatching kernel: {}, padded_a_len: {}, padded_b_len: {}, threads_count: {}, a_count: {}, b_count: {}, diagonal_stride: {}, max_threads_x: {}, threads_count: {}",
-                            //     kernel_name, padded_a_len, padded_b_len, threads_count, a_count, b_count, diagonal_stride, max_threads_x, threads_count
-                            // );
-
                             unsafe { builder.dispatch([threads_count.div_ceil(max_threads_x), 1u32, 1u32]) }.unwrap();
                         }
                     }
@@ -194,21 +167,20 @@ macro_rules! warp_kernel_spec {
                 pub struct KernelConstants {
                     first_coord: i64,
                     row: u64,
-                    diamonds_count: u64,
+                    tile_count: u64,
                     a_start: u64,
                     b_start: u64,
                     a_len: u64,
                     b_len: u64,
                     a_count: u64,
                     b_count: u64,
-                    diagonal_stride: u64,
+                    diag_len: u64,
                     max_subgroup_threads: u64,
                     $(param1: $ty1,)?
                     $(param2: $ty2,)?
                     $(param3: $ty3,)?
                     $(param4: $ty4,)?
-                    padded_a_len: u64,
-                    padded_b_len: u64,
+                    _padding: u64
                 }
 
                 #[cfg(target_arch = "spirv")]
@@ -278,7 +250,7 @@ macro_rules! warp_kernel_spec {
                     global_id: u64,
                     first_coord: i64,
                     row: u64,
-                    diamonds_count: u64,
+                    tile_count: u64,
                     a_start: u64,
                     b_start: u64,
                     a_len: u64,
@@ -300,7 +272,7 @@ macro_rules! warp_kernel_spec {
                     let warp_id: u64 = global_id % max_subgroup_threads;
                     let diamond_id = global_id / max_subgroup_threads;
 
-                    if diamond_id >= diamonds_count {
+                    if diamond_id >= tile_count {
                         return;
                     }
 
@@ -340,51 +312,6 @@ macro_rules! warp_kernel_spec {
 
                 #[cfg(target_arch = "spirv")]
                 #[spirv(compute(threads(1)))]
-                pub fn single_call(
-                    #[spirv(global_invocation_id)] global_id: UVec3,
-                    #[spirv(push_constant)] constants: &KernelConstants,
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] diagonal: &mut [f32],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] $a: &[f32],
-                    #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] $b: &[f32],
-                    $(#[spirv(storage_buffer, descriptor_set = 0, binding = 3)] vec5: &[$ty5],)?
-                ) {
-
-                    $(let $param1 = constants.param1;)?
-                    $(let $param2 = constants.param2;)?
-                    $(let $param3 = constants.param3;)?
-                    $(let $param4 = constants.param4;)?
-                    $(let $vec5 = vec5;)?
-
-                    let $a_offset = 0;
-                    let $b_offset = 0;
-
-                    let global_id = global_id.x as u64;
-                    warp_kernel(
-                        global_id,
-                        constants.first_coord,
-                        constants.row,
-                        constants.diamonds_count,
-                        constants.a_start,
-                        constants.b_start,
-                        constants.a_len,
-                        constants.b_len,
-                        constants.max_subgroup_threads,
-                        diagonal,
-                        0,
-                        diagonal.len() as u64,
-                        $a,
-                        $b,
-                        $a_offset,
-                        $b_offset,
-                        $($param1,)?
-                        $($param2,)?
-                        $($param3,)?
-                        $($param4,)?
-                        $($vec5,)?
-                    );
-                }
-                #[cfg(target_arch = "spirv")]
-                #[spirv(compute(threads(1)))]
                 pub fn batch_call(
                     #[spirv(global_invocation_id)] global_id: UVec3,
                     #[spirv(push_constant)] constants: &KernelConstants,
@@ -402,7 +329,7 @@ macro_rules! warp_kernel_spec {
 
 
                     let global_id = global_id.x as u64;
-                    let threads_stride = constants.diamonds_count * constants.max_subgroup_threads;
+                    let threads_stride = constants.tile_count * constants.max_subgroup_threads;
 
                     let pair_index = global_id / threads_stride;
                     let instance_id = global_id % threads_stride;
@@ -410,16 +337,16 @@ macro_rules! warp_kernel_spec {
                     let a_index = pair_index / constants.b_count as u64;
                     let b_index = pair_index % constants.b_count as u64;
 
-                    let diagonal_offset = pair_index * constants.diagonal_stride;
+                    let diagonal_offset = pair_index * constants.diag_len;
 
-                    let $a_offset = a_index as usize * constants.padded_a_len as usize;
-                    let $b_offset = b_index as usize * constants.padded_b_len as usize;
+                    let $a_offset = a_index as usize * constants.a_len as usize;
+                    let $b_offset = b_index as usize * constants.b_len as usize;
 
                     warp_kernel(
                         instance_id,
                         constants.first_coord,
                         constants.row,
-                        constants.diamonds_count,
+                        constants.tile_count,
                         constants.a_start,
                         constants.b_start,
                         constants.a_len,
@@ -427,7 +354,7 @@ macro_rules! warp_kernel_spec {
                         constants.max_subgroup_threads,
                         diagonal,
                         diagonal_offset,
-                        constants.diagonal_stride,
+                        constants.diag_len,
                         $a,
                         $b,
                         $a_offset,
@@ -453,21 +380,13 @@ pub mod kernel_trait {
     use vulkano::device::Device;
     use crate::utils::SubBuffersAllocator;
 
-    pub struct BatchInfo {
-        pub padded_a_len: u64,
-        pub padded_b_len: u64,
-        pub a_count: u64,
-        pub b_count: u64,
-        pub diagonal_stride: u64,
-    }
 
     pub trait GpuKernelImpl {
         type KernelParams;
 
-        fn build_kernel_params<L>(
+        fn build_kernel_params(
             &self,
             allocator: SubBuffersAllocator,
-            command_buffer: &mut AutoCommandBufferBuilder<L>,
             max_work_group_size: usize,
         ) -> Self::KernelParams;
 
@@ -478,7 +397,7 @@ pub mod kernel_trait {
             builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
             first_coord: i64,
             row: u64,
-            diamonds_count: u64,
+            tile_count: u64,
             a_start: u64,
             b_start: u64,
             a_len: u64,
@@ -487,16 +406,24 @@ pub mod kernel_trait {
             a: &Subbuffer<[f32]>,
             b: &Subbuffer<[f32]>,
             diagonal: &mut Subbuffer<[f32]>,
-            batch_info: Option<BatchInfo>,
             kernel_params: &Self::KernelParams,
         );
     }
 }
 
+#[inline(always)]
+fn min(a: f32, b: f32) -> f32 {
+    if a < b { a } else { b }
+}
+#[inline(always)]
+fn max(a: f32, b: f32) -> f32 {
+    if a > b { a } else { b }
+}
+
 const MSM_C: f32 = 1.0;
 #[inline(always)]
 pub fn msm_cost_function(x: f32, y: f32, z: f32) -> f32 {
-    MSM_C + (y.min(z) - x).max(x - y.max(z)).max(0.0)
+    MSM_C + max(max(min(y, z) - x, x - max(z, x)), 0.0)
 }
 
 warp_kernel_spec! {

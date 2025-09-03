@@ -20,9 +20,9 @@ pub mod cpu {
     use crate::kernels::twe_distance::cpu::TWEImpl;
     use crate::kernels::wdtw_distance::cpu::WDTWImpl;
     use crate::utils::SubBuffersAllocator;
-    use crate::warps::GpuBatchMode;
     use crate::warps::diamond_partitioning_gpu;
     use std::sync::Arc;
+    use std::cmp::min;
 
     use vulkano::device::Queue;
     use vulkano::{
@@ -30,17 +30,18 @@ pub mod cpu {
         descriptor_set::allocator::StandardDescriptorSetAllocator, device::Device,
     };
 
-    pub fn erp<'a, M: GpuBatchMode>(
+    pub fn erp(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
         gap_penalty: f32,
-    ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(
+    ) -> Vec<Vec<f32>> {
+
+        diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
@@ -55,17 +56,20 @@ pub mod cpu {
         )
     }
 
-    pub fn lcss<'a, M: GpuBatchMode>(
+    pub fn lcss(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
         epsilon: f32,
-    ) -> M::ReturnType {
-        let similarity = diamond_partitioning_gpu::<_, M>(
+    ) -> Vec<Vec<f32>> {
+
+        let a_len = a.first().unwrap().len();
+        let b_len = b.first().unwrap().len();
+        let similarity = diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
@@ -78,22 +82,25 @@ pub mod cpu {
             b,
             0.0,
         );
-        let min_len =
-            M::get_sample_length(&a.clone()).min(M::get_sample_length(&b.clone())) as f32;
-        M::apply_fn(similarity, |s| 1.0 - s / min_len)
+        let min_len = min(a_len, b_len) as f32;
+        similarity.iter().map(|row| {
+            row.iter()
+                .map(|&s| 1.0 - s / min_len)
+                .collect::<Vec<f32>>()
+        }).collect::<Vec<Vec<f32>>>()
     }
 
-    pub fn dtw<'a, M: GpuBatchMode>(
+    pub fn dtw(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
-    ) -> M::ReturnType {
-        // let start_time = std::time::Instant::now();
-        let res = diamond_partitioning_gpu::<_, M>(
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
+    ) -> Vec<Vec<f32>> {
+
+        diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
@@ -103,26 +110,21 @@ pub mod cpu {
             a,
             b,
             f32::INFINITY,
-        );
-        // println!(
-        //     "GPU - DTW distance computed in {} ms",
-        //     start_time.elapsed().as_millis()
-        // );
-        res
+        )
     }
 
-    pub fn wdtw<'a, M: GpuBatchMode>(
+    pub fn wdtw(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
         weights: &[f32],
-    ) -> M::ReturnType {
+    ) -> Vec<Vec<f32>> {
 
-        diamond_partitioning_gpu::<_, M>(
+        diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
@@ -135,16 +137,17 @@ pub mod cpu {
         )
     }
 
-    pub fn msm<'a, M: GpuBatchMode>(
+    pub fn msm(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
-    ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
+    ) -> Vec<Vec<f32>> {
+
+        diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
@@ -157,26 +160,27 @@ pub mod cpu {
         )
     }
 
-    pub fn twe<'a, M: GpuBatchMode>(
+    pub fn twe(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
         stiffness: f32,
         penalty: f32,
-    ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(
+    ) -> Vec<Vec<f32>> {
+
+        diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
             dsa,
             sa,
             TWEImpl {
-                stiffness: stiffness as f32,
-                penalty: penalty as f32,
+                stiffness,
+                penalty,
             },
             a,
             b,
@@ -184,23 +188,24 @@ pub mod cpu {
         )
     }
 
-    pub fn adtw<'a, M: GpuBatchMode>(
+    pub fn adtw(
         device: Arc<Device>,
         queue: Arc<Queue>,
         sba: Arc<StandardCommandBufferAllocator>,
         dsa: Arc<StandardDescriptorSetAllocator>,
         sa: SubBuffersAllocator,
-        a: M::InputType<'a>,
-        b: M::InputType<'a>,
+        a: &Vec<Vec<f32>>,
+        b: &Vec<Vec<f32>>,
         w: f32,
-    ) -> M::ReturnType {
-        diamond_partitioning_gpu::<_, M>(
+    ) -> Vec<Vec<f32>> {
+
+        diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
             dsa,
             sa,
-            ADTWImpl { w: w as f32 },
+            ADTWImpl { w },
             a,
             b,
             f32::INFINITY,

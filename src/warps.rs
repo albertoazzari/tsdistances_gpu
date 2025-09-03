@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    kernels::kernel_trait::{BatchInfo, GpuKernelImpl},
+    kernels::kernel_trait::GpuKernelImpl,
     utils::{SubBuffersAllocator, move_diag, move_ts},
 };
 use vulkano::{
@@ -9,151 +9,35 @@ use vulkano::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage
     }, descriptor_set::allocator::StandardDescriptorSetAllocator, device::{Device, Queue}, memory::MemoryHeapFlags, sync::GpuFuture
 };
+use std::cmp::max;
 
-pub trait GpuBatchMode {
-    const IS_BATCH: bool;
-
-    type ReturnType;
-    type InputType<'a>: Copy;
-
-    fn get_samples_count(input: &Self::InputType<'_>) -> usize;
-    fn new_return(alen: usize, blen: usize) -> Self::ReturnType;
-    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: f32);
-    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<f32>;
-    fn get_sample_length(input: &Self::InputType<'_>) -> usize;
-    fn get_padded_len(sample_length: usize, pad_stride: usize) -> usize {
-        next_multiple_of_n(sample_length, pad_stride)
-    }
-    fn get_subslice<'a>(
-        input: &Self::InputType<'a>,
-        start: usize,
-        len: usize,
-    ) -> Self::InputType<'a>;
-    fn apply_fn(ret: Self::ReturnType, func: impl Fn(f32) -> f32) -> Self::ReturnType;
-    fn join_results(results: Vec<Self::ReturnType>) -> Self::ReturnType;
+fn compute_sample_len(a: &Vec<Vec<f32>>) -> usize {
+    a.iter().map(|x| x.len()).sum()
 }
 
-pub struct SingleBatchMode;
-impl GpuBatchMode for SingleBatchMode {
-    const IS_BATCH: bool = false;
-
-    type ReturnType = f32;
-    type InputType<'a> = &'a [f32];
-
-    fn get_samples_count(_input: &Self::InputType<'_>) -> usize {
-        1
-    }
-
-    fn new_return(_: usize, _: usize) -> Self::ReturnType {
-        0.0
-    }
-
-    fn set_return(ret: &mut Self::ReturnType, _: usize, _: usize, value: f32) {
-        *ret = value;
-    }
-
-    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<f32> {
-        let padded_len = Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
-        let mut padded = vec![0.0; padded_len];
-        for (padded, input) in padded.iter_mut().zip(input.iter()) {
-            *padded = *input;
+fn flatten_and_pad(a: &Vec<Vec<f32>>, pad: usize) -> Vec<f32> {
+    let new_len = next_multiple_of_n(a.first().unwrap().len(), pad);
+    let mut padded = vec![0.0; new_len * a.len()];
+    for i in 0..a.len() {
+        for j in 0..a[i].len() {
+            padded[i * new_len + j] = a[i][j];
         }
-
-        padded
     }
-
-    fn get_sample_length(input: &Self::InputType<'_>) -> usize {
-        input.len()
-    }
-
-    fn apply_fn(ret: Self::ReturnType, func: impl Fn(f32) -> f32) -> Self::ReturnType {
-        func(ret)
-    }
-
-    fn get_subslice<'a>(input: &Self::InputType<'a>, _: usize, _: usize) -> Self::InputType<'a> {
-        &input
-    }
-
-    fn join_results(results: Vec<Self::ReturnType>) -> Self::ReturnType {
-        results[0]
-    }
+    padded
 }
 
-pub struct MultiBatchMode;
-impl GpuBatchMode for MultiBatchMode {
-    const IS_BATCH: bool = true;
-
-    type ReturnType = Vec<Vec<f32>>;
-
-    type InputType<'a> = &'a [Vec<f32>];
-
-    fn get_samples_count(input: &Self::InputType<'_>) -> usize {
-        input.len()
-    }
-
-    fn new_return(alen: usize, blen: usize) -> Self::ReturnType {
-        vec![vec![0.0; blen]; alen]
-    }
-
-    fn set_return(ret: &mut Self::ReturnType, i: usize, j: usize, value: f32) {
-        ret[i][j] = value;
-    }
-
-    fn build_padded(input: &Self::InputType<'_>, instance_pad_stride: usize) -> Vec<f32> {
-        let single_padded_len =
-            Self::get_padded_len(Self::get_sample_length(input), instance_pad_stride);
-        let mut padded = vec![0.0; single_padded_len * input.len()];
-        for i in 0..input.len() {
-            for j in 0..input[i].len() {
-                padded[i * single_padded_len + j] = input[i][j];
-            }
-        }
-        padded
-    }
-
-    fn get_sample_length(input: &Self::InputType<'_>) -> usize {
-        input.first().map_or(0, |x| x.len())
-    }
-
-    fn apply_fn(mut ret: Self::ReturnType, func: impl Fn(f32) -> f32) -> Self::ReturnType {
-        for i in 0..ret.len() {
-            for j in 0..ret[i].len() {
-                ret[i][j] = func(ret[i][j]);
-            }
-        }
-        ret
-    }
-
-    fn get_subslice<'a>(
-        input: &Self::InputType<'a>,
-        start: usize,
-        len: usize,
-    ) -> Self::InputType<'a> {
-        &input[start..(start + len)]
-    }
-
-    fn join_results(results: Vec<Self::ReturnType>) -> Self::ReturnType {
-        results.into_iter().flatten().collect()
-    }
-}
-
-fn compute_diag_len<M: GpuBatchMode>(sample_length: usize, pad_stride: usize) -> usize {
-    // ma ha senso paddare ad un multiplo di 32 e poi andare alla next power of two? sec me no
-    2 * (M::get_padded_len(sample_length, pad_stride) + 1).next_power_of_two()
-}
-
-pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
+pub fn diamond_partitioning_gpu<G: GpuKernelImpl>(
     device: Arc<Device>,
     queue: Arc<Queue>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     subbuffer_allocator: SubBuffersAllocator,
     params: G,
-    a: M::InputType<'a>,
-    b: M::InputType<'a>,
+    a: &Vec<Vec<f32>>,
+    b: &Vec<Vec<f32>>,
     init_val: f32,
-) -> M::ReturnType {
-    let (a, b) = if M::get_sample_length(&a) > M::get_sample_length(&b) {
+) -> Vec<Vec<f32>> {
+    let (a, b) = if compute_sample_len(a) > compute_sample_len(b) {
         (b, a)
     } else {
         (a, b)
@@ -170,16 +54,16 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         .map(|heap| heap.size)
         .sum::<u64>() as usize;
     
-    
-    let mut distances = Vec::new();
-    let a_padded = M::build_padded(&a, max_subgroup_size);
-    let b_padded = M::build_padded(&b, max_subgroup_size);
+    let a_count = a.len();
+    let a_len = next_multiple_of_n(a.first().unwrap().len(), max_subgroup_size);
+    let b_count = b.len();
+    let b_len = next_multiple_of_n(b.first().unwrap().len(), max_subgroup_size);
+    let len = max(a_len, b_len);
 
-    let a_count = M::get_samples_count(&a);
-    let b_count = M::get_samples_count(&b);
+    let a_padded = flatten_and_pad(&a, max_subgroup_size);
+    let b_padded = flatten_and_pad(&b, max_subgroup_size);
 
-    let ts_len = M::get_sample_length(&a);
-    let diag_len = 2 * (ts_len + 1).next_power_of_two();
+    let diag_len = 2 * (next_multiple_of_n(len, max_subgroup_size) + 1).next_power_of_two();
 
     // let chunk_size_mem = total_device_memory / (2*ts_len + diag_len);
     let chunk_size_buf = max_storage_buffer_size / (diag_len * std::mem::size_of::<f32>());
@@ -187,7 +71,7 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
 
     // panic!("chunk_size_buf = {chunk_size_buf}, max_storage_buffer_size = {max_storage_buffer_size}, diag_len = {diag_len}, device_mem = {device_mem}, sizeof(f32) = {}", std::mem::size_of::<f32>());
 
-    distances.push(diamond_partitioning_gpu_::<G, M>(
+    diamond_partitioning_gpu_::<G>(
         device.clone(),
         queue.clone(),
         command_buffer_allocator.clone(),
@@ -196,21 +80,18 @@ pub fn diamond_partitioning_gpu<'a, G: GpuKernelImpl, M: GpuBatchMode>(
         &params,
         max_subgroup_size,
         max_workgroup_size,
-        M::get_sample_length(&a),
-        M::get_sample_length(&b),
+        a_len,
+        b_len,
         a_padded,
         b_padded,
         a_count,
         b_count,
         init_val,
-        M::IS_BATCH,
-    ));
-    let x = M::join_results(distances);
-    x
+    )
 }
 
 #[inline(always)]
-fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
+fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
     device: Arc<Device>,
     queue: Arc<Queue>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
@@ -219,19 +100,18 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     params: &G,
     max_subgroup_threads: usize,
     max_workgroup_size: usize,
-    a_sample_len: usize,
-    b_sample_len: usize,
-    a: Vec<f32>,
-    b: Vec<f32>,
+    a_len: usize,
+    b_len: usize,
+    a_padded: Vec<f32>,
+    b_padded: Vec<f32>,
     a_count: usize,
     b_count: usize,
     init_val: f32,
-    is_batch: bool,
-) -> M::ReturnType {
-    let padded_a_len = M::get_padded_len(a_sample_len, max_subgroup_threads);
-    let padded_b_len = M::get_padded_len(b_sample_len, max_subgroup_threads);
+) -> Vec<Vec<f32>> {
+    let a_padded_len = a_padded.len() / a_count;
+    let b_padded_len = b_padded.len() / b_count;
 
-    let diag_len = compute_diag_len::<M>(a_sample_len, max_subgroup_threads);
+    let diag_len = 2 * (max(a_padded_len, b_padded_len) + 1).next_power_of_two();
 
     let mut diagonal = vec![init_val; a_count * b_count * diag_len];
 
@@ -239,15 +119,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         diagonal[i * diag_len] = 0.0;
     }
 
-    // let mut diagonal = vec![init_val; std::cmp::max(a_count, b_count) * diag_len];
+    let n_tiles_in_a = a_padded_len.div_ceil(max_subgroup_threads);
+    let n_tiles_in_b = b_padded_len.div_ceil(max_subgroup_threads);
 
-    // for i in 0..std::cmp::max(a_count, b_count) {
-    //     diagonal[i * diag_len] = 0.0;
-    // }
-
-    let a_diamonds = padded_a_len.div_ceil(max_subgroup_threads);
-    let b_diamonds = padded_b_len.div_ceil(max_subgroup_threads);
-    let rows_count = (padded_a_len + padded_b_len).div_ceil(max_subgroup_threads) - 1;
+    let rows_count = (a_padded_len + b_padded_len).div_ceil(max_subgroup_threads) - 1;
 
     let mut diamonds_count = 1;
     let mut first_coord = -(max_subgroup_threads as isize);
@@ -259,19 +134,19 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit,
     ).unwrap();
-    let a_gpu = move_ts(&a, &buffer_allocator, &mut builder, max_workgroup_size);
-    let b_gpu = move_ts(&b, &buffer_allocator, &mut builder, max_workgroup_size);
+
+    let a_gpu = move_ts(&a_padded, &buffer_allocator, max_workgroup_size);
+    let b_gpu = move_ts(&b_padded, &buffer_allocator, max_workgroup_size);
     let mut diagonal = move_diag(
         &diagonal,
         &buffer_allocator,
-        &mut builder,
         max_workgroup_size,
     );
-    let kernel_params =
-        params.build_kernel_params(buffer_allocator.clone(), &mut builder, max_workgroup_size);
+    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), max_workgroup_size);
 
     // Number of kernel calls
     for i in 0..rows_count {
+        
         params.dispatch(
             device.clone(),
             descriptor_set_allocator.clone(),
@@ -281,31 +156,20 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
             diamonds_count as u64,
             a_start as u64,
             b_start as u64,
-            a_sample_len as u64,
-            b_sample_len as u64,
+            a_len as u64,
+            b_len as u64,
             max_subgroup_threads as u64,
             &a_gpu,
             &b_gpu,
             &mut diagonal,
-            if is_batch {
-                Some(BatchInfo {
-                    padded_a_len: padded_a_len as u64,
-                    padded_b_len: padded_b_len as u64,
-                    a_count: a_count as u64,
-                    b_count: b_count as u64,
-                    diagonal_stride: diag_len as u64,
-                })
-            } else {
-                None
-            },
             &kernel_params,
         );
 
-        if i < (a_diamonds - 1) {
+        if i < (n_tiles_in_a - 1) {
             diamonds_count += 1;
             first_coord -= max_subgroup_threads as isize;
             a_start += max_subgroup_threads;
-        } else if i < (b_diamonds - 1) {
+        } else if i < (n_tiles_in_b - 1) {
             first_coord += max_subgroup_threads as isize;
             b_start += max_subgroup_threads;
         } else {
@@ -319,7 +183,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
         (i + j, (j as isize) - (i as isize))
     }
 
-    let (_, cx) = index_mat_to_diag(a_sample_len, b_sample_len);
+    let (_, cx) = index_mat_to_diag(a_len, b_len);
 
     // let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
 
@@ -335,27 +199,13 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl, M: GpuBatchMode>(
     //     "GPU - Command Buffer executed in {} ms",
     //     start_time.elapsed().as_millis()
     // );
-    let mut res = M::new_return(a_count, b_count);
+    let mut res = vec![vec![0.0; b_count]; a_count];
     let diagonal = diagonal.read().unwrap();
-    // for i in 0..a_count {
-    //     for j in 0..b_count {
-    //         let diag_offset = (i * b_count + j) * diag_len;
-    //         M::set_return(
-    //             &mut res,
-    //             i,
-    //             j,
-    //             diagonal[diag_offset + ((cx as usize) & (diag_len - 1))],
-    //         );
-    //     }
-    // }
-    for i in 0..std::cmp::max(a_count, b_count) {
-        let diag_offset = i  * diag_len;
-        M::set_return(
-            &mut res,
-            i,
-            diag_offset & (diag_len - 1),
-            diagonal[diag_offset ],//+ ((cx as usize) &)],
-        );
+    for i in 0..a_count {
+        for j in 0..b_count {
+            let diag_offset = (i * b_count + j) * diag_len;
+            res[i][j] = diagonal[diag_offset + ((cx as usize) & (diag_len - 1))];
+        }
     }
     res
 }

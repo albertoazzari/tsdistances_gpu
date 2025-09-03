@@ -161,12 +161,11 @@ pub fn get_device() -> (
     )
 }
 
-pub fn move_diag<T: BufferContents + Copy, L>(
-    data: &[T],
+pub fn move_diag(
+    data: &Vec<f32>,
     subbuffer_allocator: &SubBuffersAllocator,
-    command_buffer: &mut AutoCommandBufferBuilder<L>,
     alignment: usize,
-) -> Subbuffer<[T]> {
+) -> Subbuffer<[f32]> {
     let padded_len = data.len().div_ceil(alignment) * alignment;
 
     // let cpu_buffer = subbuffer_allocator
@@ -191,12 +190,11 @@ pub fn move_diag<T: BufferContents + Copy, L>(
     gpu_buffer
 }
 
-pub fn move_ts<T: BufferContents + Copy, L>(
-    data: &[T],
+pub fn move_ts(
+    data: &Vec<f32>,
     subbuffer_allocator: &SubBuffersAllocator,
-    command_buffer: &mut AutoCommandBufferBuilder<L>,
     alignment: usize,
-) -> Subbuffer<[T]> {
+) -> Subbuffer<[f32]> {
     let padded_len = data.len().div_ceil(alignment) * alignment;
     let gpu_buffer = subbuffer_allocator
         .ts

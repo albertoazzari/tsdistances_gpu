@@ -2,9 +2,9 @@ use std::fmt::write;
 
 use csv::ReaderBuilder;
 use tsdistances_gpu::{
-    cpu::{adtw, dtw, erp, lcss, msm, twe, wdtw},
+    // cpu::{adtw, dtw, erp, lcss, msm, twe, wdtw},
+    cpu::{erp, dtw},
     utils::get_device,
-    warps::{GpuBatchMode, MultiBatchMode, SingleBatchMode},
 };
 
 fn read_txt<T>(file_path: &str) -> Result<Vec<Vec<T>>, Box<dyn std::error::Error>>
@@ -54,14 +54,13 @@ fn dtw_weights(len: usize, g: f32) -> Vec<f32> {
 
 #[test]
 fn test_erp_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let ds_name = "ACSF1";
+    let train_data: Vec<Vec<f32>> = read_txt(&format!("../../DATA/ucr/{}/{}_TRAIN.tsv", ds_name, ds_name)).unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt(&format!("../../DATA/ucr/{}/{}_TEST.tsv", ds_name, ds_name)).unwrap();
 
     let (device, queue, sba, sda, ma) = get_device();
 
-    let gap_penalty = 1.0;
-
-    let result = erp::<MultiBatchMode>(
+    let result = erp(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -69,69 +68,44 @@ fn test_erp_distance() {
         ma.clone(),
         &train_data,
         &test_data,
-        gap_penalty,
+        0.0,
     );
+
+    write_csv("erp_result.csv", &result).unwrap();
+
 }
 
-#[test]
-fn test_lcss_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+// #[test]
+// fn test_lcss_distance() {
+//     let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+//     let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
-    let (device, queue, sba, sda, ma) = get_device();
-    let epsilon = 1.0;
-    let start = std::time::Instant::now();
-    let result = lcss::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &train_data,
-        &test_data,
-        epsilon,
-    );
-    let elapsed = start.elapsed();
-    println!("LCSS elapsed time: {:?}", elapsed);
-}
+//     let (device, queue, sba, sda, ma) = get_device();
+//     let epsilon = 1.0;
+//     let start = std::time::Instant::now();
+//     let result = lcss::<MultiBatchMode>(
+//         device.clone(),
+//         queue.clone(),
+//         sba.clone(),
+//         sda.clone(),
+//         ma.clone(),
+//         &train_data,
+//         &test_data,
+//         epsilon,
+//     );
+//     let elapsed = start.elapsed();
+//     println!("LCSS elapsed time: {:?}", elapsed);
+// }
 
 #[test]
 fn test_dtw_distance() {
-    let ds_name = "CBF";
+    let ds_name = "ACSF1";
     let train_data: Vec<Vec<f32>> = read_txt(&format!("../../DATA/ucr/{}/{}_TRAIN.tsv", ds_name, ds_name)).unwrap();
     let test_data: Vec<Vec<f32>> = read_txt(&format!("../../DATA/ucr/{}/{}_TEST.tsv", ds_name, ds_name)).unwrap();
-    // let train_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TRAIN.tsv").unwrap();
-    // let test_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/NonInvasiveFetalECGThorax1/NonInvasiveFetalECGThorax1_TEST.tsv").unwrap();
-
-    // let start = std::time::Instant::now();
-
-    // let (device, queue, sba, sda, ma) = get_device();
-
-    // println!("Device elapsed time: {:?}", start.elapsed());
-    // for i in 0..train_data.len() {
-    //     for j in 0..test_data.len() {
-            
-    //         let result = dtw::<SingleBatchMode>(
-    //             device.clone(),
-    //             queue.clone(),
-    //             sba.clone(),
-    //             sda.clone(),
-    //             ma.clone(),
-    //             &train_data[i],
-    //             &test_data[j],
-    //         );
-    //     }
-    // }
-    // println!("Single DTW elapsed time: {:?}", start.elapsed());
-
 
     let start = std::time::Instant::now();
-
     let (device, queue, sba, sda, ma) = get_device();
-
-    println!("Device elapsed time: {:?}", start.elapsed());
-
-    let result = dtw::<MultiBatchMode>(
+    let result = dtw(
         device.clone(),
         queue.clone(),
         sba.clone(),
@@ -140,95 +114,88 @@ fn test_dtw_distance() {
         &train_data,
         &test_data,
     );
-    println!("DTW elapsed time: {:?}", start.elapsed());
-
-    write_csv(&format!("tests/{}_DTW_TE.csv", ds_name), &result).unwrap();
-    // Device elapsed time: 278.698142ms
-    // Single DTW elapsed time: 23.71971498s
-    // Device elapsed time: 213ns
-    // DTW elapsed time: 12.042854409s
 
 }
 
-#[test]
-fn test_wdtw_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+// #[test]
+// fn test_wdtw_distance() {
+//     let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+//     let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
-    let (device, queue, sba, sda, ma) = get_device();
-    let g = 0.05;
-    let weights = dtw_weights(train_data[0].len(), g);
+//     let (device, queue, sba, sda, ma) = get_device();
+//     let g = 0.05;
+//     let weights = dtw_weights(train_data[0].len(), g);
 
-    let result = wdtw::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &train_data,
-        &test_data,
-        &weights,
-    );
-}
+//     let result = wdtw::<MultiBatchMode>(
+//         device.clone(),
+//         queue.clone(),
+//         sba.clone(),
+//         sda.clone(),
+//         ma.clone(),
+//         &train_data,
+//         &test_data,
+//         &weights,
+//     );
+// }
 
-#[test]
-fn test_adtw_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+// #[test]
+// fn test_adtw_distance() {
+//     let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+//     let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
-    let (device, queue, sba, sda, ma) = get_device();
+//     let (device, queue, sba, sda, ma) = get_device();
 
-    let w = 0.1;
+//     let w = 0.1;
 
-    let result = adtw::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &train_data,
-        &test_data,
-        w,
-    );
-}
+//     let result = adtw::<MultiBatchMode>(
+//         device.clone(),
+//         queue.clone(),
+//         sba.clone(),
+//         sda.clone(),
+//         ma.clone(),
+//         &train_data,
+//         &test_data,
+//         w,
+//     );
+// }
 
-#[test]
-fn test_msm_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+// #[test]
+// fn test_msm_distance() {
+//     let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+//     let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
-    let (device, queue, sba, sda, ma) = get_device();
+//     let (device, queue, sba, sda, ma) = get_device();
 
-    let result = msm::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &train_data,
-        &test_data,
-    );
-}
+//     let result = msm::<MultiBatchMode>(
+//         device.clone(),
+//         queue.clone(),
+//         sba.clone(),
+//         sda.clone(),
+//         ma.clone(),
+//         &train_data,
+//         &test_data,
+//     );
+// }
 
-#[test]
-fn test_twe_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+// #[test]
+// fn test_twe_distance() {
+//     let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
+//     let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
 
-    let (device, queue, sba, sda, ma) = get_device();
+//     let (device, queue, sba, sda, ma) = get_device();
 
-    let stiffness = 0.001;
-    let penalty = 1.0;
+//     let stiffness = 0.001;
+//     let penalty = 1.0;
 
-    let result = twe::<MultiBatchMode>(
-        device.clone(),
-        queue.clone(),
-        sba.clone(),
-        sda.clone(),
-        ma.clone(),
-        &train_data,
-        &test_data,
-        stiffness,
-        penalty,
-    );
-}
+//     let result = twe::<MultiBatchMode>(
+//         device.clone(),
+//         queue.clone(),
+//         sba.clone(),
+//         sda.clone(),
+//         ma.clone(),
+//         &train_data,
+//         &test_data,
+//         stiffness,
+//         penalty,
+//     );
+// }
