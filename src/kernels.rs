@@ -66,10 +66,11 @@ macro_rules! warp_kernel_spec {
                         fn build_kernel_params(
                             &self,
                             _allocator: SubBuffersAllocator,
+                            _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                             max_work_group_size: usize,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_ts(&self.$vec5, &_allocator, max_work_group_size))?
+                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, _builder, max_work_group_size))?
                             }
                         }
 
@@ -387,6 +388,7 @@ pub mod kernel_trait {
         fn build_kernel_params(
             &self,
             allocator: SubBuffersAllocator,
+            builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
             max_work_group_size: usize,
         ) -> Self::KernelParams;
 

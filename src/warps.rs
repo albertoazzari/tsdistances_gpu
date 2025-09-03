@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     kernels::kernel_trait::GpuKernelImpl,
-    utils::{SubBuffersAllocator, move_diag, move_ts},
+    utils::{move_cpu, move_gpu, SubBuffersAllocator},
 };
 use vulkano::{
     command_buffer::{
@@ -135,14 +135,15 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
         CommandBufferUsage::OneTimeSubmit,
     ).unwrap();
 
-    let a_gpu = move_ts(&a_padded, &buffer_allocator, max_workgroup_size);
-    let b_gpu = move_ts(&b_padded, &buffer_allocator, max_workgroup_size);
-    let mut diagonal = move_diag(
+    let a_gpu = move_gpu(&a_padded, &buffer_allocator, &mut builder, max_workgroup_size);
+    let b_gpu = move_gpu(&b_padded, &buffer_allocator, &mut builder, max_workgroup_size);
+    let mut diagonal = move_gpu(
         &diagonal,
         &buffer_allocator,
+        &mut builder,
         max_workgroup_size,
     );
-    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), max_workgroup_size);
+    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), &mut builder, max_workgroup_size);
 
     // Number of kernel calls
     for i in 0..rows_count {
@@ -185,9 +186,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
 
     let (_, cx) = index_mat_to_diag(a_len, b_len);
 
-    // let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
-
-    // let start_time = std::time::Instant::now();
+    let diagonal = move_cpu(&buffer_allocator, &diagonal, &mut builder);
     let command_buffer = builder.build().unwrap();
     let future = vulkano::sync::now(device)
         .then_execute(queue, command_buffer)
@@ -195,10 +194,7 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
         .then_signal_fence_and_flush()
         .unwrap();
     future.wait(None).unwrap();
-    // println!(
-    //     "GPU - Command Buffer executed in {} ms",
-    //     start_time.elapsed().as_millis()
-    // );
+    
     let mut res = vec![vec![0.0; b_count]; a_count];
     let diagonal = diagonal.read().unwrap();
     for i in 0..a_count {

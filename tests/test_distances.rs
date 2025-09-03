@@ -23,7 +23,7 @@ where
             .iter()
             .map(|s| s.parse::<T>())
             .collect::<Result<Vec<_>, _>>()?;
-        records.push(row[1..].to_vec());
+        records.push(row);
     }
     Ok(records)
 }
