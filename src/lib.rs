@@ -21,8 +21,8 @@ pub mod cpu {
     use crate::kernels::wdtw_distance::cpu::WDTWImpl;
     use crate::utils::SubBuffersAllocator;
     use crate::warps::diamond_partitioning_gpu;
-    use std::sync::Arc;
     use std::cmp::min;
+    use std::sync::Arc;
 
     use vulkano::device::Queue;
     use vulkano::{
@@ -40,7 +40,6 @@ pub mod cpu {
         b: &Vec<Vec<f32>>,
         gap_penalty: f32,
     ) -> Vec<Vec<f32>> {
-
         diamond_partitioning_gpu::<_>(
             device,
             queue,
@@ -66,7 +65,6 @@ pub mod cpu {
         b: &Vec<Vec<f32>>,
         epsilon: f32,
     ) -> Vec<Vec<f32>> {
-
         let a_len = a.first().unwrap().len();
         let b_len = b.first().unwrap().len();
         let similarity = diamond_partitioning_gpu::<_>(
@@ -75,19 +73,16 @@ pub mod cpu {
             sba,
             dsa,
             sa,
-            LCSSImpl {
-                epsilon,
-            },
+            LCSSImpl { epsilon },
             a,
             b,
             0.0,
         );
         let min_len = min(a_len, b_len) as f32;
-        similarity.iter().map(|row| {
-            row.iter()
-                .map(|&s| 1.0 - s / min_len)
-                .collect::<Vec<f32>>()
-        }).collect::<Vec<Vec<f32>>>()
+        similarity
+            .iter()
+            .map(|row| row.iter().map(|&s| 1.0 - s / min_len).collect::<Vec<f32>>())
+            .collect::<Vec<Vec<f32>>>()
     }
 
     pub fn dtw(
@@ -99,18 +94,7 @@ pub mod cpu {
         a: &Vec<Vec<f32>>,
         b: &Vec<Vec<f32>>,
     ) -> Vec<Vec<f32>> {
-
-        diamond_partitioning_gpu::<_>(
-            device,
-            queue,
-            sba,
-            dsa,
-            sa,
-            DTWImpl {},
-            a,
-            b,
-            f32::INFINITY,
-        )
+        diamond_partitioning_gpu::<_>(device, queue, sba, dsa, sa, DTWImpl {}, a, b, f32::INFINITY)
     }
 
     pub fn wdtw(
@@ -123,14 +107,15 @@ pub mod cpu {
         b: &Vec<Vec<f32>>,
         weights: &[f32],
     ) -> Vec<Vec<f32>> {
-
         diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
             dsa,
             sa,
-            WDTWImpl { weights: weights.to_vec() },
+            WDTWImpl {
+                weights: weights.to_vec(),
+            },
             a,
             b,
             f32::INFINITY,
@@ -146,18 +131,7 @@ pub mod cpu {
         a: &Vec<Vec<f32>>,
         b: &Vec<Vec<f32>>,
     ) -> Vec<Vec<f32>> {
-
-        diamond_partitioning_gpu::<_>(
-            device,
-            queue,
-            sba,
-            dsa,
-            sa,
-            MSMImpl {},
-            a,
-            b,
-            f32::INFINITY,
-        )
+        diamond_partitioning_gpu::<_>(device, queue, sba, dsa, sa, MSMImpl {}, a, b, f32::INFINITY)
     }
 
     pub fn twe(
@@ -171,17 +145,13 @@ pub mod cpu {
         stiffness: f32,
         penalty: f32,
     ) -> Vec<Vec<f32>> {
-
         diamond_partitioning_gpu::<_>(
             device,
             queue,
             sba,
             dsa,
             sa,
-            TWEImpl {
-                stiffness,
-                penalty,
-            },
+            TWEImpl { stiffness, penalty },
             a,
             b,
             f32::INFINITY,
@@ -198,7 +168,6 @@ pub mod cpu {
         b: &Vec<Vec<f32>>,
         w: f32,
     ) -> Vec<Vec<f32>> {
-
         diamond_partitioning_gpu::<_>(
             device,
             queue,

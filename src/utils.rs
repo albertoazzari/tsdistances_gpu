@@ -7,8 +7,7 @@ use vulkano::{
         allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo},
     },
     command_buffer::{
-        AutoCommandBufferBuilder, CommandBuffer, CopyBufferInfo,
-        allocator::StandardCommandBufferAllocator,
+        AutoCommandBufferBuilder, CopyBufferInfo, allocator::StandardCommandBufferAllocator,
     },
     descriptor_set::allocator::StandardDescriptorSetAllocator,
     device::{
@@ -55,7 +54,7 @@ impl SubBuffersAllocator {
             self.gpu.arena_size()
         );
     }
-    
+
     pub fn clear(&self) -> () {
         self.gpu.set_arena_size(0);
         self.cpu.set_arena_size(0);
@@ -181,54 +180,38 @@ pub fn get_device() -> (
     )
 }
 
-pub struct OutputSubBuffer<T> {
-    pub cpu: Option<Subbuffer<[T]>>,
+pub struct SubBufferPair<T> {
+    pub cpu: Subbuffer<[T]>,
     pub gpu: Subbuffer<[T]>,
 }
 
-pub fn move_gpu<T: BufferContents + Copy, L>(
-    data: &[T],
-    subbuffer_allocator: &SubBuffersAllocator,
-    command_buffer: &mut AutoCommandBufferBuilder<L>,
-    is_output: bool,
-) -> OutputSubBuffer<T> {
-
-    let cpu_buffer = subbuffer_allocator
-        .cpu
-        .allocate_slice(data.len() as u64)
-        .unwrap();
-    cpu_buffer.write().unwrap().copy_from_slice(&data);
-
-    let gpu_buffer = subbuffer_allocator
-        .gpu
-        .allocate_slice(data.len() as u64)
-        .unwrap();
-
-    command_buffer
-        .copy_buffer(CopyBufferInfo::buffers(
-            cpu_buffer.clone(),
-            gpu_buffer.clone(),
-        ))
-        .unwrap();
-
-    OutputSubBuffer {
-        cpu: if is_output { Some(cpu_buffer) } else { None },
-        gpu: gpu_buffer,
+impl<T: BufferContents + Copy> SubBufferPair<T> {
+    pub fn new(subbuffer_allocator: &SubBuffersAllocator, length: u64) -> Self {
+        let cpu = subbuffer_allocator
+            .cpu
+            .allocate_slice(length)
+            .expect("failed to allocate cpu buffer");
+        let gpu = subbuffer_allocator
+            .gpu
+            .allocate_slice(length)
+            .expect("failed to allocate gpu buffer");
+        Self { cpu, gpu }
     }
 }
 
-impl<T: BufferContents + Copy> OutputSubBuffer<T> {
-    pub fn move_cpu<L>(
-        &self,
-        command_buffer: &mut AutoCommandBufferBuilder<L>,
-    ) -> Subbuffer<[T]> {
-        let cpu_buffer = self.cpu.as_ref().unwrap();
+impl<T: BufferContents + Copy> SubBufferPair<T> {
+    pub fn move_gpu<L>(&self, data: &[T], command_buffer: &mut AutoCommandBufferBuilder<L>) {
+        self.cpu.write().unwrap()[0..data.len()].copy_from_slice(&data);
+
         command_buffer
-            .copy_buffer(CopyBufferInfo::buffers(
-                self.gpu.clone(),
-                cpu_buffer.clone(),
-            ))
+            .copy_buffer(CopyBufferInfo::buffers(self.cpu.clone(), self.gpu.clone()))
             .unwrap();
-        cpu_buffer.clone()
+    }
+
+    pub fn move_cpu<L>(&self, command_buffer: &mut AutoCommandBufferBuilder<L>) -> Subbuffer<[T]> {
+        command_buffer
+            .copy_buffer(CopyBufferInfo::buffers(self.gpu.clone(), self.cpu.clone()))
+            .unwrap();
+        self.cpu.clone()
     }
 }
