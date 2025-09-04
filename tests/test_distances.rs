@@ -21,6 +21,7 @@ where
         let record = result?;
         let row: Vec<T> = record
             .iter()
+            .skip(1) // Skip the label column
             .map(|s| s.parse::<T>())
             .collect::<Result<Vec<_>, _>>()?;
         records.push(row);
@@ -53,8 +54,8 @@ fn dtw_weights(len: usize, g: f32) -> Vec<f32> {
 
 #[test]
 fn test_erp_distance() {
-    let train_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TRAIN.csv").unwrap();
-    let test_data: Vec<Vec<f32>> = read_txt("tests/ACSF1/ACSF1_TEST.csv").unwrap();
+    let train_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/UWaveGestureLibraryX/UWaveGestureLibraryX_TRAIN.tsv").unwrap();
+    let test_data: Vec<Vec<f32>> = read_txt("../../DATA/ucr/UWaveGestureLibraryX/UWaveGestureLibraryX_TEST.tsv").unwrap();
 
     let start_time = std::time::Instant::now();
     let (device, queue, sba, sda, ma) = get_device();

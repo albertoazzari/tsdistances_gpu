@@ -18,9 +18,9 @@ fn compute_sample_len(a: &Vec<Vec<f32>>) -> usize {
 fn flatten_and_pad(a: &Vec<Vec<f32>>, pad: usize) -> Vec<f32> {
     let new_len = next_multiple_of_n(a.first().unwrap().len(), pad);
     let mut padded = vec![0.0; new_len * a.len()];
-    for i in 0..a.len() {
-        for j in 0..a[i].len() {
-            padded[i * new_len + j] = a[i][j];
+    for (i, row) in a.into_iter().enumerate() {
+        for (j, val) in row.into_iter().enumerate() {
+            padded[i * new_len + j] = *val;
         }
     }
     padded
@@ -43,16 +43,9 @@ pub fn diamond_partitioning_gpu<G: GpuKernelImpl>(
         (a, b)
     };
 
-    let pdevice = device.physical_device();
-    let properties = pdevice.properties();
+    let properties = device.physical_device().properties();
     let max_subgroup_size = properties.max_subgroup_size.unwrap() as usize;
-    let max_workgroup_size = properties.max_compute_work_group_size[0] as usize;
-    let max_storage_buffer_size = properties.max_storage_buffer_range as usize;
-    let device_mem = pdevice.memory_properties().memory_heaps
-        .iter()
-        .filter(|heap| heap.flags.contains(MemoryHeapFlags::DEVICE_LOCAL))
-        .map(|heap| heap.size)
-        .sum::<u64>() as usize;
+    let max_storage_buffer_size = properties.max_storage_buffer_range as usize / std::mem::size_of::<f32>();
     
     let a_count = a.len();
     let a_len = next_multiple_of_n(a.first().unwrap().len(), max_subgroup_size);
@@ -64,30 +57,46 @@ pub fn diamond_partitioning_gpu<G: GpuKernelImpl>(
     let b_padded = flatten_and_pad(&b, max_subgroup_size);
 
     let diag_len = 2 * (next_multiple_of_n(len, max_subgroup_size) + 1).next_power_of_two();
+    let max_pairs = max_storage_buffer_size / diag_len;
 
-    // let chunk_size_mem = total_device_memory / (2*ts_len + diag_len);
-    let chunk_size_buf = max_storage_buffer_size / (diag_len * std::mem::size_of::<f32>());
-    // let chunk_size = chunk_size_buf.min(chunk_size_mem);
+    let chunk_side = (max_pairs as f64).sqrt().floor() as usize;
+    // to fill the gap in a or b chunk if one is too small
+    let a_chunk = a_count.min(chunk_side);
+    let b_chunk = b_count.min(chunk_side);
 
-    // panic!("chunk_size_buf = {chunk_size_buf}, max_storage_buffer_size = {max_storage_buffer_size}, diag_len = {diag_len}, device_mem = {device_mem}, sizeof(f32) = {}", std::mem::size_of::<f32>());
+    let mut dist_matrix = vec![vec![0f32; b_count]; a_count];
 
-    diamond_partitioning_gpu_::<G>(
-        device.clone(),
-        queue.clone(),
-        command_buffer_allocator.clone(),
-        descriptor_set_allocator.clone(),
-        subbuffer_allocator.clone(),
-        &params,
-        max_subgroup_size,
-        max_workgroup_size,
-        a_len,
-        b_len,
-        a_padded,
-        b_padded,
-        a_count,
-        b_count,
-        init_val,
-    )
+    for a_start in (0..a_count).step_by(a_chunk) {
+        let a_end = (a_start + a_chunk).min(a_count);
+
+        for b_start in (0..b_count).step_by(b_chunk) {
+            let b_end = (b_start + b_chunk).min(b_count);
+
+            let a_sub = &a_padded[a_start * a_len .. a_end * a_len];
+            let b_sub = &b_padded[b_start * b_len .. b_end * b_len];
+
+            diamond_partitioning_gpu_::<G>(
+                device.clone(),
+                queue.clone(),
+                command_buffer_allocator.clone(),
+                descriptor_set_allocator.clone(),
+                subbuffer_allocator.clone(),
+                &params,
+                max_subgroup_size,
+                a_len,
+                b_len,
+                a_sub,
+                b_sub,
+                a_end - a_start,
+                b_end - b_start,
+                init_val,
+                &mut dist_matrix[a_start..a_end],
+                b_start,
+            );
+        }
+    }
+    // panic!("dist matrix {:?}", &dist_matrix[..5].iter().map(|r| &r[..5]).collect::<Vec<_>>());
+    dist_matrix
 }
 
 #[inline(always)]
@@ -99,19 +108,18 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
     buffer_allocator: SubBuffersAllocator,
     params: &G,
     max_subgroup_threads: usize,
-    max_workgroup_size: usize,
     a_len: usize,
     b_len: usize,
-    a_padded: Vec<f32>,
-    b_padded: Vec<f32>,
+    a_padded: &[f32],
+    b_padded: &[f32],
     a_count: usize,
     b_count: usize,
     init_val: f32,
-) -> Vec<Vec<f32>> {
-    let a_padded_len = a_padded.len() / a_count;
-    let b_padded_len = b_padded.len() / b_count;
+    dist_matrix: &mut [Vec<f32>],
+    column_offset: usize,
+) {
 
-    let diag_len = 2 * (max(a_padded_len, b_padded_len) + 1).next_power_of_two();
+    let diag_len = 2 * (max(a_len, b_len) + 1).next_power_of_two();
 
     let mut diagonal = vec![init_val; a_count * b_count * diag_len];
 
@@ -119,10 +127,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
         diagonal[i * diag_len] = 0.0;
     }
 
-    let n_tiles_in_a = a_padded_len.div_ceil(max_subgroup_threads);
-    let n_tiles_in_b = b_padded_len.div_ceil(max_subgroup_threads);
+    let n_tiles_in_a = a_len.div_ceil(max_subgroup_threads);
+    let n_tiles_in_b = b_len.div_ceil(max_subgroup_threads);
 
-    let rows_count = (a_padded_len + b_padded_len).div_ceil(max_subgroup_threads) - 1;
+    let rows_count = (a_len + b_len).div_ceil(max_subgroup_threads) - 1;
 
     let mut diamonds_count = 1;
     let mut first_coord = -(max_subgroup_threads as isize);
@@ -135,15 +143,10 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
         CommandBufferUsage::OneTimeSubmit,
     ).unwrap();
 
-    let a_gpu = move_gpu(&a_padded, &buffer_allocator, &mut builder, max_workgroup_size);
-    let b_gpu = move_gpu(&b_padded, &buffer_allocator, &mut builder, max_workgroup_size);
-    let mut diagonal = move_gpu(
-        &diagonal,
-        &buffer_allocator,
-        &mut builder,
-        max_workgroup_size,
-    );
-    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), &mut builder, max_workgroup_size);
+    let a_gpu = move_gpu(&a_padded, &buffer_allocator, &mut builder);
+    let b_gpu = move_gpu(&b_padded, &buffer_allocator, &mut builder);
+    let mut diagonal = move_gpu(&diagonal, &buffer_allocator, &mut builder);
+    let kernel_params = params.build_kernel_params(buffer_allocator.clone(), &mut builder);
 
     // Number of kernel calls
     for i in 0..rows_count {
@@ -195,15 +198,13 @@ fn diamond_partitioning_gpu_<G: GpuKernelImpl>(
         .unwrap();
     future.wait(None).unwrap();
     
-    let mut res = vec![vec![0.0; b_count]; a_count];
     let diagonal = diagonal.read().unwrap();
     for i in 0..a_count {
         for j in 0..b_count {
             let diag_offset = (i * b_count + j) * diag_len;
-            res[i][j] = diagonal[diag_offset + ((cx as usize) & (diag_len - 1))];
+            dist_matrix[i][column_offset+j] = diagonal[diag_offset + ((cx as usize) & (diag_len - 1))];
         }
     }
-    res
 }
 
 fn next_multiple_of_n(x: usize, n: usize) -> usize {

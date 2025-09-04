@@ -19,8 +19,6 @@ use vulkano::{
     memory::allocator::{MemoryTypeFilter, StandardMemoryAllocator},
 };
 
-use crate::cpu;
-
 #[macro_export]
 macro_rules! assert_eq_with_tol {
     ($a:expr, $b:expr, $tol:expr) => {
@@ -165,24 +163,22 @@ pub fn move_gpu<T: BufferContents + Copy, L>(
     data: &[T],
     subbuffer_allocator: &SubBuffersAllocator,
     command_buffer: &mut AutoCommandBufferBuilder<L>,
-    alignment: usize,
 ) -> Subbuffer<[T]> {
-    let padded_len = data.len().div_ceil(alignment) * alignment;
 
     let cpu_buffer = subbuffer_allocator
         .cpu
-        .allocate_slice(padded_len as u64)
+        .allocate_slice(data.len() as u64)
         .unwrap();
-    cpu_buffer.write().unwrap()[0..data.len()].copy_from_slice(&data);
+    cpu_buffer.write().unwrap().copy_from_slice(&data);
 
     let gpu_buffer = subbuffer_allocator
         .gpu
-        .allocate_slice(padded_len as u64)
+        .allocate_slice(data.len() as u64)
         .unwrap();
 
     command_buffer
         .copy_buffer(CopyBufferInfo::buffers(
-            cpu_buffer.clone(),
+            cpu_buffer,
             gpu_buffer.clone(),
         ))
         .unwrap();

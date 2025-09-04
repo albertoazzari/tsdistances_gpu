@@ -27,7 +27,8 @@ debug = true
 lto = true
 opt-level = 3
 codegen-units = 1
-strip = true
+# strip = true
+debug = true
 
 [target.'cfg(not(target_arch = "spirv"))'.dependencies]
 vulkano = { version = "0.35.1" }
