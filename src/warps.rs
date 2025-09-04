@@ -79,8 +79,10 @@ pub fn diamond_partitioning_gpu<G: GpuKernelImpl>(
 
     let mut dp_buffers = DiamondPartitioning::new(
         subbuffer_allocator.clone(),
-        (a_chunk * a_len) as u64,
-        (b_chunk * b_len) as u64,
+        a_chunk as u64,
+        b_chunk as u64,
+        a_len as u64,
+        b_len as u64,
         diag_len as u64,
     );
 
@@ -113,6 +115,9 @@ pub fn diamond_partitioning_gpu<G: GpuKernelImpl>(
             );
         }
     }
+
+    subbuffer_allocator.clear();
+
     // panic!("dist matrix {:?}", &dist_matrix[..5].iter().map(|r| &r[..5]).collect::<Vec<_>>());
     dist_matrix
 }
@@ -120,14 +125,16 @@ pub fn diamond_partitioning_gpu<G: GpuKernelImpl>(
 impl<G: GpuKernelImpl> DiamondPartitioning<G> {
     pub fn new(
         subbuffer_allocator: SubBuffersAllocator,
-        max_a: u64,
-        max_b: u64,
+        a_count: u64,
+        b_count: u64,
+        a_padded_len: u64,
+        b_padded_len: u64,
         diag_len: u64,
     ) -> Self {
         Self {
-            a_buffer: SubBufferPair::new(&subbuffer_allocator, max_a),
-            b_buffer: SubBufferPair::new(&subbuffer_allocator, max_b),
-            diagonal_buffer: SubBufferPair::new(&subbuffer_allocator, max_a * max_b * diag_len),
+            a_buffer: SubBufferPair::new(&subbuffer_allocator, a_count * a_padded_len),
+            b_buffer: SubBufferPair::new(&subbuffer_allocator, b_count * b_padded_len),
+            diagonal_buffer: SubBufferPair::new(&subbuffer_allocator, a_count * b_count * diag_len),
             kernel_params: None,
         }
     }
@@ -152,8 +159,6 @@ impl<G: GpuKernelImpl> DiamondPartitioning<G> {
         dist_matrix: &mut [Vec<f32>],
         column_offset: usize,
     ) {
-        buffer_allocator.clear();
-
         let diag_len = 2 * (max(a_len, b_len) + 1).next_power_of_two();
 
         let mut diagonal = vec![init_val; a_count * b_count * diag_len];

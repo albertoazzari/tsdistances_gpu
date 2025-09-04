@@ -67,9 +67,9 @@ macro_rules! warp_kernel_spec {
                             _allocator: SubBuffersAllocator,
                             _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                         ) -> Self::KernelParams {
-                            use crate::utils::SubBufferPair;
                             $(
-                                let buffers = SubBufferPair::new(self.$vec5.len() as u64, &_allocator)
+                                use crate::utils::SubBufferPair;
+                                let buffers = SubBufferPair::new(&_allocator, self.$vec5.len() as u64);
                                 buffers.move_gpu(&self.$vec5, _builder);
                             )?
                             KernelParams {
