@@ -40,6 +40,28 @@ pub struct SubBuffersAllocator {
     cpu: Arc<SubbufferAllocator>,
 }
 
+impl SubBuffersAllocator {
+    pub fn debug(&self) {
+        use memory_stats::memory_stats;
+        if let Some(usage) = memory_stats() {
+            println!("Current physical memory usage: {}", usage.physical_mem);
+            println!("Current virtual memory usage: {}", usage.virtual_mem);
+        } else {
+            println!("Couldn't get the current memory usage :(");
+        }
+        println!(
+            "CPU arena size: {}, GPU arena size: {}",
+            self.cpu.arena_size(),
+            self.gpu.arena_size()
+        );
+    }
+    
+    pub fn clear(&self) -> () {
+        self.gpu.set_arena_size(0);
+        self.cpu.set_arena_size(0);
+    }
+}
+
 type CachedCore = (
     Arc<Device>,
     Arc<Queue>,
@@ -159,11 +181,17 @@ pub fn get_device() -> (
     )
 }
 
+pub struct OutputSubBuffer<T> {
+    pub cpu: Option<Subbuffer<[T]>>,
+    pub gpu: Subbuffer<[T]>,
+}
+
 pub fn move_gpu<T: BufferContents + Copy, L>(
     data: &[T],
     subbuffer_allocator: &SubBuffersAllocator,
     command_buffer: &mut AutoCommandBufferBuilder<L>,
-) -> Subbuffer<[T]> {
+    is_output: bool,
+) -> OutputSubBuffer<T> {
 
     let cpu_buffer = subbuffer_allocator
         .cpu
@@ -178,28 +206,29 @@ pub fn move_gpu<T: BufferContents + Copy, L>(
 
     command_buffer
         .copy_buffer(CopyBufferInfo::buffers(
-            cpu_buffer,
+            cpu_buffer.clone(),
             gpu_buffer.clone(),
         ))
         .unwrap();
 
-    gpu_buffer
+    OutputSubBuffer {
+        cpu: if is_output { Some(cpu_buffer) } else { None },
+        gpu: gpu_buffer,
+    }
 }
 
-pub fn move_cpu<T: BufferContents + Copy, L>(
-    subbuffer_allocator: &SubBuffersAllocator,
-    gpu_buffer: &Subbuffer<[T]>,
-    command_buffer: &mut AutoCommandBufferBuilder<L>,
-) -> Subbuffer<[T]> {
-    let cpu_buffer = subbuffer_allocator
-        .cpu
-        .allocate_slice(gpu_buffer.len() as u64)
-        .unwrap();
-    command_buffer
-        .copy_buffer(CopyBufferInfo::buffers(
-            gpu_buffer.clone(),
-            cpu_buffer.clone(),
-        ))
-        .unwrap();
-    cpu_buffer
+impl<T: BufferContents + Copy> OutputSubBuffer<T> {
+    pub fn move_cpu<L>(
+        &self,
+        command_buffer: &mut AutoCommandBufferBuilder<L>,
+    ) -> Subbuffer<[T]> {
+        let cpu_buffer = self.cpu.as_ref().unwrap();
+        command_buffer
+            .copy_buffer(CopyBufferInfo::buffers(
+                self.gpu.clone(),
+                cpu_buffer.clone(),
+            ))
+            .unwrap();
+        cpu_buffer.clone()
+    }
 }

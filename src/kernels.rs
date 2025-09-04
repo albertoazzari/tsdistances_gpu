@@ -69,7 +69,7 @@ macro_rules! warp_kernel_spec {
                             _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
                         ) -> Self::KernelParams {
                             KernelParams {
-                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, _builder))?
+                                $($vec5: crate::utils::move_gpu(&self.$vec5, &_allocator, _builder, false).gpu)?
                             }
                         }
 
