@@ -70,10 +70,9 @@ macro_rules! warp_kernel_spec {
                             $(
                                 use crate::utils::SubBufferPair;
                                 let buffers = SubBufferPair::new(&_allocator, self.$vec5.len() as u64);
-                                buffers.move_gpu(&self.$vec5, _builder);
                             )?
                             KernelParams {
-                                $($vec5: buffers.gpu)?
+                                $($vec5: buffers.move_gpu(&self.$vec5, _builder))?
                             }
                         }
 

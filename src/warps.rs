@@ -191,9 +191,9 @@ impl<G: GpuKernelImpl> DiamondPartitioning<G> {
 
         let kernel_params = self.kernel_params.as_mut().unwrap();
 
-        self.a_buffer.move_gpu(&a_padded, &mut builder);
-        self.b_buffer.move_gpu(&b_padded, &mut builder);
-        self.diagonal_buffer.move_gpu(&diagonal, &mut builder);
+        let a_gpu = self.a_buffer.move_gpu(&a_padded, &mut builder);
+        let b_gpu = self.b_buffer.move_gpu(&b_padded, &mut builder);
+        let mut diagonal_buffer_gpu = self.diagonal_buffer.move_gpu(&diagonal, &mut builder);
 
         // Number of kernel calls
         for i in 0..rows_count {
@@ -209,9 +209,9 @@ impl<G: GpuKernelImpl> DiamondPartitioning<G> {
                 a_len as u64,
                 b_len as u64,
                 max_subgroup_threads as u64,
-                &self.a_buffer.gpu,
-                &self.b_buffer.gpu,
-                &mut self.diagonal_buffer.gpu,
+                &a_gpu,
+                &b_gpu,
+                &mut diagonal_buffer_gpu,
                 &kernel_params,
             );
 

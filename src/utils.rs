@@ -181,8 +181,8 @@ pub fn get_device() -> (
 }
 
 pub struct SubBufferPair<T> {
-    pub cpu: Subbuffer<[T]>,
-    pub gpu: Subbuffer<[T]>,
+    cpu: Subbuffer<[T]>,
+    gpu: Subbuffer<[T]>,
 }
 
 impl<T: BufferContents + Copy> SubBufferPair<T> {
@@ -200,12 +200,18 @@ impl<T: BufferContents + Copy> SubBufferPair<T> {
 }
 
 impl<T: BufferContents + Copy> SubBufferPair<T> {
-    pub fn move_gpu<L>(&self, data: &[T], command_buffer: &mut AutoCommandBufferBuilder<L>) {
+    pub fn move_gpu<L>(
+        &self,
+        data: &[T],
+        command_buffer: &mut AutoCommandBufferBuilder<L>,
+    ) -> Subbuffer<[T]> {
         self.cpu.write().unwrap()[0..data.len()].copy_from_slice(&data);
 
         command_buffer
             .copy_buffer(CopyBufferInfo::buffers(self.cpu.clone(), self.gpu.clone()))
             .unwrap();
+
+        self.gpu.clone().slice(0..data.len() as u64)
     }
 
     pub fn move_cpu<L>(&self, command_buffer: &mut AutoCommandBufferBuilder<L>) -> Subbuffer<[T]> {
